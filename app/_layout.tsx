@@ -1,7 +1,9 @@
+import "react-native-gesture-handler";
 import { Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { authStore } from '../src/store/auth.store';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 
 export default function RootLayout() {
   useEffect(() => {
@@ -10,6 +12,8 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+    <BottomSheetModalProvider>
+
     <Stack screenOptions={{ headerShown: false }}>
       {/* Our routing gate */}
       <Stack.Screen name="index" />
@@ -23,6 +27,7 @@ export default function RootLayout() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
     </Stack>
+    </BottomSheetModalProvider>
     </GestureHandlerRootView>
   );
 }

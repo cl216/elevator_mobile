@@ -1,0 +1,31 @@
+diff --git a/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarker.java b/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarker.java
+index b755f9b..22e1eda 100644
+--- a/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarker.java
++++ b/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarker.java
+@@ -622,4 +622,10 @@ public class MapMarker extends MapFeature {
+     return BitmapDescriptorFactory.fromResource(getDrawableResourceByName(name));
+   }
+ 
++ @Override
++  protected void onLayout(boolean changed, int l, int t, int r, int b) {
++    super.onLayout(changed, l, t, r, b);
++    this.height = b-t;
++    this.width = r-l;
++  }
+ }
+diff --git a/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarkerManager.java b/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarkerManager.java
+index 8cf3d72..67a5cd5 100644
+--- a/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarkerManager.java
++++ b/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarkerManager.java
+@@ -365,4 +365,11 @@ public class MapMarkerManager extends ViewGroupManager<MapMarker> {
+         float height = data.get("height");
+         view.update((int) width, (int) height);
+     }
++
++  @Override
++  protected void onLayout(boolean changed, int l, int t, int r, int b) {
++    super.onLayout(changed, l, t, r, b);
++    this.height = b-t;
++    this.width = r-l;
++  }
+ }
