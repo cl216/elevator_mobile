@@ -2,11 +2,20 @@ import * as Location from "expo-location";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image, Platform, Pressable, Text, View } from "react-native";
-import MapView, { Marker, Region } from "react-native-maps";
+import Mapbox from "@rnmapbox/maps";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
 
 import { authStore } from "../../src/store/auth.store";
-import { TeacherMarker, Category as MarkerCategory } from "../../src/components/map/TeacherMarker";
+import {
+  TeacherMarker,
+  Category as MarkerCategory,
+} from "../../src/components/map/TeacherMarker";
+
+// -------- Mapbox setup --------
+// Put your pk token here for now (fastest).
+// Later we can move to .env / EAS secrets.
+Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN!);
+
 
 type MapSessionPreview = {
   sessionId: string;
@@ -22,24 +31,14 @@ type MapSessionPreview = {
   attendeeCount?: number;
 };
 
-const DUBLIN_REGION: Region = {
-  latitude: 53.3498,
-  longitude: -6.2603,
-  latitudeDelta: 0.12,
-  longitudeDelta: 0.12,
-};
 
-const DARK_MAP_STYLE = [
-  { elementType: "geometry", stylers: [{ color: "#1b1b1b" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#8a8a8a" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#1b1b1b" }] },
-  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#8a8a8a" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2a2a2a" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#111111" }] },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#8a8a8a" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0f0f0f" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#6e6e6e" }] },
-];
+
+// Dublin fallback
+const DUBLIN_CENTER: [number, number] = [-6.2603, 53.3498];
+const INITIAL_ZOOM = 11.5;
+
+// Mapbox dark style URL
+const DARK_STYLE_URL = "mapbox://styles/mapbox/dark-v11";
 
 function normalizeCategory(category?: string): MarkerCategory {
   if (category === "music" || category === "art") return category;
@@ -47,25 +46,15 @@ function normalizeCategory(category?: string): MarkerCategory {
 }
 
 export default function LearnerMap() {
-  const mapRef = useRef<MapView | null>(null);
+  const mapRef = useRef<Mapbox.MapView | null>(null);
+  const cameraRef = useRef<Mapbox.Camera | null>(null);
 
-  const [region, setRegion] = useState<Region>(DUBLIN_REGION);
   const [selected, setSelected] = useState<MapSessionPreview | null>(null);
   const [locError, setLocError] = useState<string | null>(null);
 
   // Bottom sheet
   const sheetRef = useRef<BottomSheetModal>(null);
   const snapPoints = useMemo(() => ["25%", "55%"], []);
-
-  // Per-marker ready set for Android marker snapshots
-  const readySetRef = useRef<Set<string>>(new Set());
-  const [, forceRerender] = useState(0);
-  const markReady = useCallback((id: string) => {
-    if (!readySetRef.current.has(id)) {
-      readySetRef.current.add(id);
-      forceRerender((x) => x + 1);
-    }
-  }, []);
 
   // Mock data (replace with backend later)
   const sessions = useMemo<MapSessionPreview[]>(
@@ -113,11 +102,17 @@ export default function LearnerMap() {
     []
   );
 
+  // Location permission + camera centering (replaces animateToRegion)
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         setLocError("Location permission denied. Using Dublin fallback.");
+        cameraRef.current?.setCamera({
+          centerCoordinate: DUBLIN_CENTER,
+          zoomLevel: INITIAL_ZOOM,
+          animationDuration: 600,
+        });
         return;
       }
 
@@ -125,15 +120,16 @@ export default function LearnerMap() {
         accuracy: Location.Accuracy.Balanced,
       });
 
-      const next: Region = {
-        latitude: current.coords.latitude,
-        longitude: current.coords.longitude,
-        latitudeDelta: 0.08,
-        longitudeDelta: 0.08,
-      };
+      const center: [number, number] = [
+        current.coords.longitude,
+        current.coords.latitude,
+      ];
 
-      setRegion(next);
-      mapRef.current?.animateToRegion(next, 600);
+      cameraRef.current?.setCamera({
+        centerCoordinate: center,
+        zoomLevel: 12.5,
+        animationDuration: 700,
+      });
     })();
   }, []);
 
@@ -160,53 +156,44 @@ export default function LearnerMap() {
 
   return (
     <View style={{ flex: 1 }}>
-      <MapView
+      <Mapbox.MapView
         ref={(r) => {
           mapRef.current = r;
         }}
         style={{ flex: 1 }}
-        initialRegion={DUBLIN_REGION}
-        onRegionChangeComplete={setRegion}
-        customMapStyle={DARK_MAP_STYLE}
+        styleURL={DARK_STYLE_URL}
+        logoEnabled={false}
+        attributionEnabled={false}
+        compassEnabled
+        scaleBarEnabled={false}
       >
-        {sessions.map((s) => {
-          const isReady = readySetRef.current.has(s.sessionId);
-
-          
-          return (
-            <Marker   
-             //style={{ width: 10, height: 10 }}
-              key={s.sessionId}
-              coordinate={{ latitude: s.lat, longitude: s.lng }}
-              onPress={() => openPreview(s)}
-              // ✅ Fix for clipped markers on Android:
-              // keep tracksViewChanges ON until this marker has laid out / loaded image
-              //tracksViewChanges={!isReady}
-              //anchor={{ x: 0.5, y: 0.6 }}
-            >
-              
-              <TeacherMarker
-                avatarUrl={s.teacherAvatarUrl}
-                category={normalizeCategory(s.sessionCategory)}
-                selected={selected?.sessionId === s.sessionId}
-                onReady={() => markReady(s.sessionId)}
-                />
+        <Mapbox.Camera
+          ref={(r) => {
+            cameraRef.current = r;
+          }}
+          defaultSettings={{
+            centerCoordinate: DUBLIN_CENTER,
+            zoomLevel: INITIAL_ZOOM,
+          }}
+        />
 
 
-
-              {/* <View style={{ width:40, height: 30, alignItems: "center", justifyContent: "center" }}> */}
-              {/* <TeacherMarker
-                avatarUrl={s.teacherAvatarUrl}
-                category={normalizeCategory(s.sessionCategory)}
-                selected={selected?.sessionId === s.sessionId}
-                onReady={() => markReady(s.sessionId)}
-                
-              /> */}
-              {/* </View> */}
-            </Marker>
-          );
-        })}
-      </MapView>
+ {sessions.map((s) => (
+   <Mapbox.MarkerView key={s.sessionId} coordinate={[s.lng, s.lat]}>
+     <Pressable
+       onPress={() => openPreview(s)}
+       style={{ width: 64, height: 64, alignItems: "center", justifyContent: "center" }}
+    >
+       <TeacherMarker
+         avatarUrl={s.teacherAvatarUrl}
+         category={normalizeCategory(s.sessionCategory)}
+         selected={selected?.sessionId === s.sessionId}
+         onReady={() => {}}
+       />
+     </Pressable>
+   </Mapbox.MarkerView>
+        ))}
+      </Mapbox.MapView>
 
       {/* Top bar */}
       <View

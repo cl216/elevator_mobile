@@ -12,16 +12,11 @@ type Props = {
   onReady?: () => void;
 };
 
-// const AVATAR_SIZE = 48;
-// const BADGE_SIZE = 16;
-// const RING = 3;
-
-
 const AVATAR_SIZE = 48;
 const BADGE_SIZE = 16;
 const RING = 3;
 // Root must be big enough to include the badge so react-native-maps bitmap snapshot won't clip.
-const OUTER_SIZE = AVATAR_SIZE + RING * 2 + BADGE_SIZE +10;
+const OUTER_SIZE = AVATAR_SIZE + RING * 2 + BADGE_SIZE + 10;
 
 export function TeacherMarker({ avatarUrl, category, selected, onReady }: Props) {
   return (
@@ -30,28 +25,21 @@ export function TeacherMarker({ avatarUrl, category, selected, onReady }: Props)
         {avatarUrl ? (
           <Image
             source={{ uri: avatarUrl }}
+            // ✅ Mapbox/Android: ensure deterministic fill + cropping
             style={styles.avatar}
-            // When the image finishes loading, the marker is safe to snapshot.
+            resizeMode="cover" // ✅
             onLoadEnd={onReady}
           />
         ) : (
           <View style={styles.fallback}>
-            <MaterialCommunityIcons
-              name={categoryIcon(category)}
-              size={24}
-              color="white"
-            />
+            <MaterialCommunityIcons name={categoryIcon(category)} size={24} color="white" />
           </View>
         )}
       </View>
 
       {/* Category badge (kept INSIDE outer bounds — no negative offsets) */}
       <View style={styles.categoryBadge} collapsable={false}>
-        <MaterialCommunityIcons
-          name={categoryIcon(category)}
-          size={10}
-          color="#111"
-        />
+        <MaterialCommunityIcons name={categoryIcon(category)} size={10} color="#111" />
       </View>
     </View>
   );
@@ -74,7 +62,7 @@ const styles = StyleSheet.create({
     height: OUTER_SIZE,
     alignItems: "center",
     justifyContent: "center",
-     display: "flex"
+    display: "flex",
   },
 
   ring: {
@@ -85,9 +73,9 @@ const styles = StyleSheet.create({
     padding: RING,
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.15)",
+    overflow: "hidden", // ✅ critical: clip avatar reliably
   },
 
-  // Keep this small so it doesn't exceed OUTER_SIZE and risk clipping.
   ringSelected: {
     transform: [{ scale: 1.12 }],
   },
