@@ -14,8 +14,13 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
     <BottomSheetModalProvider>
 
-    <Stack screenOptions={{ headerShown: false }}>
-      {/* Our routing gate */}
+<Stack
+  screenOptions={{
+    headerShown: false,
+    animation: "slide_from_right",
+    gestureEnabled: true,
+  }}
+>      {/* Our routing gate */}
       <Stack.Screen name="index" />
 
       {/* Our new route groups */}
