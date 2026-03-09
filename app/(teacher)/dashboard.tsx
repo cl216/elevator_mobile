@@ -243,8 +243,7 @@ onPress={() => router.push("/(teacher)/profile")}
 
             <Pressable
               onPress={() => {
-                Alert.alert("Next step", "Create session screen comes after class creation.");
-              }}
+    router.push("/(teacher)/sessions/create");              }}
               style={{
                 backgroundColor: "#111",
                 paddingVertical: 12,

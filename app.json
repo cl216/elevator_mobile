@@ -6,15 +6,17 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "plugins": [
       "expo-router",
       "expo-dev-client",
-[
+      [
         "@rnmapbox/maps",
         {
-      "RNMapboxMapsDownloadToken": "${MAPBOX_DOWNLOAD_TOKEN}"        }
-      ]
+          "RNMapboxMapsDownloadToken": "${MAPBOX_DOWNLOAD_TOKEN}"
+        }
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "android": {
       "package": "com.yourcompany.elevator",
