@@ -2,17 +2,17 @@ import { useLocalSearchParams, router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from "react-native";
+import * as Linking from "expo-linking";
 import { API_BASE_URL } from "../../../src/config/api";
-import {
-  followTeacher,
-  unfollowTeacher,
-  getFollowStatus,
-} from "../../../src/api/teacher";
+import { createBooking } from "../../../src/api/bookings";
+import { createCheckoutSession } from "../../../src/api/payments";
 
 type SessionDetail = {
   id: string;
@@ -23,17 +23,15 @@ type SessionDetail = {
   teacher?: { id: string; name?: string; avatarUrl?: string };
 };
 
-export default function SessionPanel() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+export default function BookingPanel() {
+  const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
 
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [following, setFollowing] = useState(false);
-  const [followLoading, setFollowLoading] = useState(false);
-
-  const panelLeftMargin = "0%";
+  const [introMessage, setIntroMessage] = useState("");
+  const [reserveLoading, setReserveLoading] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -43,26 +41,16 @@ export default function SessionPanel() {
         setLoading(true);
         setError(null);
 
-        const res = await fetch(`${API_BASE_URL}/sessions/${id}`);
+        const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const data = (await res.json()) as SessionDetail;
-
         if (!alive) return;
-        setSession(data);
 
-        if (data?.teacher?.id) {
-          try {
-            const status = await getFollowStatus(data.teacher.id);
-            if (!alive) return;
-            setFollowing(status.following);
-          } catch (e) {
-            console.warn("Follow status failed", e);
-          }
-        }
+        setSession(data);
       } catch (e: any) {
         if (!alive) return;
-        setError(e?.message ?? "Failed to load session");
+        setError(e?.message ?? "Failed to load booking details");
       } finally {
         if (!alive) return;
         setLoading(false);
@@ -72,23 +60,38 @@ export default function SessionPanel() {
     return () => {
       alive = false;
     };
-  }, [id]);
+  }, [sessionId]);
 
-  async function toggleFollow(teacherId: string) {
+  async function handleReserve() {
+    if (!session?.id) return;
+
     try {
-      setFollowLoading(true);
+      setReserveLoading(true);
 
-      if (following) {
-        await unfollowTeacher(teacherId);
-        setFollowing(false);
-      } else {
-        await followTeacher(teacherId);
-        setFollowing(true);
+      const booking = await createBooking(session.id, introMessage);
+      const checkout = await createCheckoutSession(booking.id);
+
+      if (!checkout?.checkoutUrl) {
+        throw new Error("Missing checkout URL");
       }
-    } catch (e) {
+
+      console.log("checkout url", checkout.checkoutUrl);
+
+await Linking.openURL(checkout.checkoutUrl);
+    } catch (e: any) {
       console.error(e);
+
+      const message =
+        e?.response?.data?.message ??
+        e?.message ??
+        "Could not start checkout.";
+
+      Alert.alert(
+        "Booking error",
+        Array.isArray(message) ? message.join("\n") : String(message),
+      );
     } finally {
-      setFollowLoading(false);
+      setReserveLoading(false);
     }
   }
 
@@ -108,7 +111,7 @@ export default function SessionPanel() {
         onPress={() => {}}
         style={{
           flex: 1,
-          marginLeft: panelLeftMargin,
+          marginLeft: "0%",
           backgroundColor: "white",
           borderTopLeftRadius: 22,
           borderBottomLeftRadius: 22,
@@ -123,46 +126,11 @@ export default function SessionPanel() {
           }}
         >
           <Text style={{ fontSize: 18, fontWeight: "900" }} numberOfLines={2}>
-            {title}
+            Confirm booking
           </Text>
 
-          <View
-            style={{ flexDirection: "row", alignItems: "center", marginTop: 6 }}
-          >
-            <Pressable
-              onPress={() => {
-                if (session?.teacher?.id) {
-                  router.push(`/(modal)/teacher/${session.teacher.id}`);
-                }
-              }}
-              style={{ flex: 1 }}
-            >
-              <Text style={{ fontWeight: "700" }}>{teacherName}</Text>
-            </Pressable>
-
-            {session?.teacher?.id && (
-              <Pressable
-                onPress={() => toggleFollow(session.teacher!.id)}
-                disabled={followLoading}
-                style={{
-                  backgroundColor: following ? "#eee" : "black",
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: 8,
-                }}
-              >
-                <Text
-                  style={{
-                    color: following ? "black" : "white",
-                    fontWeight: "700",
-                  }}
-                >
-                  {followLoading ? "..." : following ? "Following" : "Follow"}
-                </Text>
-              </Pressable>
-            )}
-          </View>
-
+          <Text style={{ marginTop: 8, fontWeight: "800" }}>{title}</Text>
+          <Text style={{ marginTop: 6, fontWeight: "700" }}>{teacherName}</Text>
           {start ? <Text style={{ marginTop: 6 }}>{start}</Text> : null}
           <Text style={{ marginTop: 6, fontWeight: "800" }}>€{price}</Text>
 
@@ -174,7 +142,7 @@ export default function SessionPanel() {
           </Pressable>
         </View>
 
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 140 }}>
           {loading ? (
             <View style={{ paddingTop: 30, alignItems: "center" }}>
               <ActivityIndicator />
@@ -182,24 +150,46 @@ export default function SessionPanel() {
             </View>
           ) : error ? (
             <View style={{ paddingTop: 20 }}>
-              <Text style={{ fontWeight: "900" }}>Couldn’t load session</Text>
+              <Text style={{ fontWeight: "900" }}>Couldn’t load booking</Text>
               <Text style={{ marginTop: 8 }}>{error}</Text>
             </View>
           ) : (
             <>
-              {session?.class?.category ? (
-                <Text style={{ marginBottom: 10 }}>
-                  Category: {session.class.category}
-                </Text>
-              ) : null}
+              <Text style={{ lineHeight: 20, marginBottom: 16 }}>
+                Add a short message for the host if you want. This is optional.
+              </Text>
 
-              {session?.class?.description ? (
-                <Text style={{ lineHeight: 20 }}>
-                  {session.class.description}
-                </Text>
-              ) : (
-                <Text style={{ opacity: 0.7 }}>No description yet.</Text>
-              )}
+              <Text style={{ fontWeight: "800", marginBottom: 8 }}>
+                Optional message
+              </Text>
+
+              <TextInput
+                value={introMessage}
+                onChangeText={setIntroMessage}
+                placeholder="Hi! Excited to join this class."
+                multiline
+                maxLength={300}
+                style={{
+                  minHeight: 100,
+                  borderWidth: 1,
+                  borderColor: "rgba(0,0,0,0.12)",
+                  borderRadius: 12,
+                  padding: 12,
+                  textAlignVertical: "top",
+                  backgroundColor: "#fafafa",
+                }}
+              />
+
+              <Text
+                style={{
+                  marginTop: 6,
+                  fontSize: 12,
+                  opacity: 0.6,
+                }}
+              >
+                Keep communication on-platform. Contact details and off-platform
+                payment requests are not allowed.
+              </Text>
             </>
           )}
         </ScrollView>
@@ -217,20 +207,19 @@ export default function SessionPanel() {
           }}
         >
           <Pressable
-            onPress={() => {
-              if (session?.id) {
-                router.push(`/(modal)/booking/${session.id}`);
-              }
-            }}
-            disabled={loading || !!error}
+            onPress={handleReserve}
+            disabled={reserveLoading || loading || !!error}
             style={{
-              backgroundColor: loading || error ? "#666" : "black",
+              backgroundColor:
+                reserveLoading || loading || error ? "#666" : "black",
               paddingVertical: 14,
               borderRadius: 14,
               alignItems: "center",
             }}
           >
-            <Text style={{ color: "white", fontWeight: "900" }}>Reserve</Text>
+            <Text style={{ color: "white", fontWeight: "900" }}>
+              {reserveLoading ? "Starting checkout..." : `Continue to pay €${price}`}
+            </Text>
           </Pressable>
         </View>
       </Pressable>

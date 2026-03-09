@@ -11,7 +11,9 @@
       "expo-router",
       "expo-dev-client",
 [
-
+        "@rnmapbox/maps",
+        {
+      "RNMapboxMapsDownloadToken": "${MAPBOX_DOWNLOAD_TOKEN}"        }
       ]
     ],
     "android": {

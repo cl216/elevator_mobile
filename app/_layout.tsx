@@ -30,7 +30,7 @@ export default function RootLayout() {
 
       {/* Keep template routes so nothing breaks */}
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="(modal)" options={{ presentation: 'modal' }} />
     </Stack>
     </BottomSheetModalProvider>
     </GestureHandlerRootView>

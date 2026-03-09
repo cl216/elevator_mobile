@@ -1,9 +1,8 @@
 import * as Location from "expo-location";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Image, Platform, Pressable, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 import Mapbox, { StyleImport } from "@rnmapbox/maps";
-import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
 
 import { API_BASE_URL } from "../../src/config/api";
 import { authStore } from "../../src/store/auth.store";
@@ -12,14 +11,7 @@ import {
   Category as MarkerCategory,
 } from "../../src/components/map/TeacherMarker";
 
-// -------- Mapbox setup --------
-// Put your pk token here for now (fastest).
-// Later we can move to .env / EAS secrets.
-
-//Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN!);
-
-// const requestSeqRef = useRef(0);
-// const [isMapLoading, setIsMapLoading] = useState(false);
+Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_PUBLIC_TOKEN!);
 
 type MapSessionPreview = {
   sessionId: string;
@@ -30,23 +22,28 @@ type MapSessionPreview = {
   startTimeISO: string;
   teacherName: string;
   teacherAvatarUrl?: string;
-  sessionCategory?: string; // backend will later control this
+  sessionCategory?: string;
   thumbnailUrl?: string;
   attendeeCount?: number;
 };
 
-// type MapSessionPoint = {
-//   sessionId: string;
-//   lat: number;
-//   lng: number;
-// };
-
-// Dublin fallback
 const DUBLIN_CENTER: [number, number] = [-6.2603, 53.3498];
 const INITIAL_ZOOM = 14;
+const CLUSTER_RADIUS = 90;
+const CLUSTER_SWITCH_ZOOM = 11.5;
 
-// Mapbox dark style URL
 const MAP_STYLE_URL = "mapbox://styles/mapbox/standard";
+
+const CATEGORY_OPTIONS = [
+  "all",
+  "art",
+  "music",
+  "cooking",
+  "language",
+  "crafts",
+] as const;
+
+type CategoryFilter = (typeof CATEGORY_OPTIONS)[number];
 
 function normalizeCategory(category?: string): MarkerCategory {
   if (category === "music" || category === "art") return category;
@@ -56,8 +53,8 @@ function normalizeCategory(category?: string): MarkerCategory {
 type BBox = { west: number; south: number; east: number; north: number };
 
 function boundsToBBox(bounds: any): BBox | null {
-  // Mapbox getVisibleBounds() => [[lng, lat], [lng, lat]] (SW, NE)
   if (!bounds || !Array.isArray(bounds) || bounds.length !== 2) return null;
+
   const sw = bounds[0];
   const ne = bounds[1];
   if (!sw || !ne) return null;
@@ -70,56 +67,121 @@ function boundsToBBox(bounds: any): BBox | null {
   };
 }
 
-function bboxKey(b: BBox) {
-  // round to avoid refetching constantly while panning
+function padBBox(b: BBox, factor = 0.75): BBox {
+  const latPad = (b.north - b.south) * factor;
+  const lngPad = (b.east - b.west) * factor;
+
+  return {
+    west: b.west - lngPad,
+    south: b.south - latPad,
+    east: b.east + lngPad,
+    north: b.north + latPad,
+  };
+}
+
+function bboxKey(b: BBox, category: CategoryFilter) {
   const r = (n: number) => n.toFixed(4);
-  return `${r(b.west)}|${r(b.south)}|${r(b.east)}|${r(b.north)}`;
+  return `${category}|${r(b.west)}|${r(b.south)}|${r(b.east)}|${r(b.north)}`;
+}
+
+type SessionFeature = {
+  type: "Feature";
+  id: string;
+  properties: {
+    sessionId: string;
+    title: string;
+    price: number;
+    category: string;
+  };
+  geometry: {
+    type: "Point";
+    coordinates: [number, number];
+  };
+};
+
+type SessionFeatureCollection = {
+  type: "FeatureCollection";
+  features: SessionFeature[];
+};
+
+function sessionsToFeatureCollection(
+  sessions: MapSessionPreview[]
+): SessionFeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: sessions
+      .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng))
+      .map((s) => ({
+        type: "Feature",
+        id: s.sessionId,
+        properties: {
+          sessionId: s.sessionId,
+          title: s.title,
+          price: s.price,
+          category: s.sessionCategory ?? "other",
+        },
+        geometry: {
+          type: "Point",
+          coordinates: [s.lng, s.lat],
+        },
+      })),
+  };
 }
 
 export default function LearnerMap() {
   const currentZoomRef = useRef<number>(INITIAL_ZOOM);
-
   const requestSeqRef = useRef(0);
-  const [isMapLoading, setIsMapLoading] = useState(false);
-
-
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastKeyRef = useRef<string | null>(null);
 
   const mapRef = useRef<Mapbox.MapView | null>(null);
   const cameraRef = useRef<Mapbox.Camera | null>(null);
+  const shapeSourceRef = useRef<Mapbox.ShapeSource | null>(null);
 
-  const [selected, setSelected] = useState<MapSessionPreview | null>(null);
-  // const [points, setPoints] = useState<MapSessionPoint[]>([]);
+  const [selectedCategory, setSelectedCategory] =
+    useState<CategoryFilter>("all");
+  const [isMapLoading, setIsMapLoading] = useState(false);
   const [sessions, setSessions] = useState<MapSessionPreview[]>([]);
-
   const [locError, setLocError] = useState<string | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(INITIAL_ZOOM);
 
-  // Android emulator -> your PC
-  //const API_BASE_URL = "http://10.0.2.2:3000";
+  const showClusterSource = zoomLevel < CLUSTER_SWITCH_ZOOM;
+  const showCustomMarkers = zoomLevel >= CLUSTER_SWITCH_ZOOM;
+
+  const sessionFeatureCollection = useMemo(
+    () => sessionsToFeatureCollection(sessions),
+    [sessions]
+  );
 
   const fetchForCurrentMap = useCallback(async () => {
     try {
       if (currentZoomRef.current < 10) {
-        return; // keep existing markers; just don't refetch
+        return;
       }
+
       const bounds = await mapRef.current?.getVisibleBounds();
       const bbox = boundsToBBox(bounds);
       if (!bbox) return;
 
-      const key = bboxKey(bbox);
+      const paddedBBox = padBBox(bbox, 0.75);
+      const key = bboxKey(paddedBBox, selectedCategory);
+
       if (key === lastKeyRef.current) return;
       lastKeyRef.current = key;
 
-      const myReq = ++requestSeqRef.current; // ✅ sequence id for stale response protection
+      const myReq = ++requestSeqRef.current;
       setIsMapLoading(true);
 
       const qs = new URLSearchParams({
-        north: String(bbox.north),
-        south: String(bbox.south),
-        east: String(bbox.east),
-        west: String(bbox.west),
+        north: String(paddedBBox.north),
+        south: String(paddedBBox.south),
+        east: String(paddedBBox.east),
+        west: String(paddedBBox.west),
       });
+
+      if (selectedCategory !== "all") {
+        qs.append("category", selectedCategory);
+      }
 
       const res = await fetch(`${API_BASE_URL}/sessions/map?${qs.toString()}`);
 
@@ -129,9 +191,8 @@ export default function LearnerMap() {
       }
 
       const data = await res.json();
-      const rows = Array.isArray(data) ? data : []; // ✅ avoid .map on non-array
+      const rows = Array.isArray(data) ? data : [];
 
-      // ✅ Ignore stale responses
       if (myReq !== requestSeqRef.current) return;
 
       const next: MapSessionPreview[] = rows
@@ -141,25 +202,24 @@ export default function LearnerMap() {
           lng: Number(r.lng),
           title: r.title ?? "Session",
           price: Number(r.price ?? 0),
-          startTimeISO: r.start_time ? new Date(r.start_time).toISOString() : new Date().toISOString(),
+          startTimeISO: r.start_time
+            ? new Date(r.start_time).toISOString()
+            : new Date().toISOString(),
           teacherName: r.teacher_name ?? "Teacher",
           teacherAvatarUrl: r.teacher_avatar_url ?? undefined,
           sessionCategory: r.category ?? undefined,
           thumbnailUrl: undefined,
           attendeeCount: 0,
         }))
-        .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng)); // ✅ never allow NaN/undefined coords
-      console.log("next sessions:", next);
+        .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng));
 
       setSessions(next);
-
     } catch (e) {
       console.log("fetchForCurrentMap error", e);
     } finally {
       setIsMapLoading(false);
     }
-  }, [API_BASE_URL]);
-
+  }, [selectedCategory]);
 
   const onRegionDidChangeDebounced = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -168,68 +228,54 @@ export default function LearnerMap() {
     }, 350);
   }, [fetchForCurrentMap]);
 
-  // Bottom sheet
-  const sheetRef = useRef<BottomSheetModal>(null);
-  const snapPoints = useMemo(() => ["25%", "55%"], []);
+  const handleShapeSourcePress = useCallback(async (event: any) => {
+    const feature = event?.features?.[0];
+    if (!feature) return;
 
-  // Mock data (replace with backend later)
-  // const sessions = useMemo<MapSessionPreview[]>(
-  //   () => [
-  //     {
-  //       sessionId: "s1",
-  //       lat: 53.3498,
-  //       lng: -6.2603,
-  //       title: "Watercolour Basics",
-  //       price: 25,
-  //       startTimeISO: "2026-02-10T10:00:00Z",
-  //       teacherName: "Aoife",
-  //       teacherAvatarUrl: "https://picsum.photos/seed/aoife/128",
-  //       sessionCategory: "art",
-  //       thumbnailUrl: "https://picsum.photos/200/120",
-  //       attendeeCount: 7,
-  //     },
-  //     {
-  //       sessionId: "s2",
-  //       lat: 53.342,
-  //       lng: -6.286,
-  //       title: "Guitar Fundamentals",
-  //       price: 40,
-  //       startTimeISO: "2026-02-11T18:30:00Z",
-  //       teacherName: "Niamh",
-  //       teacherAvatarUrl: "https://picsum.photos/seed/niamh/128",
-  //       sessionCategory: "music",
-  //       thumbnailUrl: "https://picsum.photos/201/120",
-  //       attendeeCount: 3,
-  //     },
-  //     {
-  //       sessionId: "s3",
-  //       lat: 53.36,
-  //       lng: -6.245,
-  //       title: "Pottery Wheel Intro",
-  //       price: 55,
-  //       startTimeISO: "2026-02-12T12:00:00Z",
-  //       teacherName: "Eoin",
-  //       teacherAvatarUrl: "https://picsum.photos/seed/eoin/128",
-  //       sessionCategory: "art",
-  //       thumbnailUrl: "https://picsum.photos/202/120",
-  //       attendeeCount: 1,
-  //     },
-  //   ],
-  //   []
-  // );
+    const props = feature.properties ?? {};
+    const coordinates = feature.geometry?.coordinates;
 
+    if (!Array.isArray(coordinates)) return;
 
+    if (props.cluster) {
+      if (shapeSourceRef.current) {
+        try {
+          const expansionZoom =
+            await shapeSourceRef.current.getClusterExpansionZoom(feature);
 
-  // Location permission + camera centering (replaces animateToRegion)
+          cameraRef.current?.setCamera({
+            centerCoordinate: coordinates as [number, number],
+            zoomLevel: expansionZoom,
+            animationDuration: 250,
+          });
+        } catch (e) {
+          console.log("cluster expansion failed", e);
+        }
+      }
+
+      return;
+    }
+
+    cameraRef.current?.setCamera({
+      centerCoordinate: coordinates as [number, number],
+      zoomLevel: Math.max(
+        CLUSTER_SWITCH_ZOOM + 0.5,
+        currentZoomRef.current + 1
+      ),
+      animationDuration: 250,
+    });
+  }, []);
+
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
+
       if (status !== "granted") {
         setLocError("Location permission denied. Using Dublin fallback.");
         cameraRef.current?.setCamera({
           centerCoordinate: DUBLIN_CENTER,
           zoomLevel: INITIAL_ZOOM,
-          pitch: 55,
+          pitch: 35,
           heading: -20,
           animationDuration: 700,
         });
@@ -253,36 +299,15 @@ export default function LearnerMap() {
     })();
   }, []);
 
+  useEffect(() => {
+    lastKeyRef.current = null;
+    fetchForCurrentMap();
+  }, [selectedCategory, fetchForCurrentMap]);
+
   const handleLogout = useCallback(async () => {
     await authStore.getState().logout();
     router.replace("/");
   }, []);
-
-  const formatStart = useCallback((iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleString();
-  }, []);
-
-  const openPreview = useCallback((s: MapSessionPreview) => {
-    setSelected(s);
-    requestAnimationFrame(() => {
-      sheetRef.current?.present();
-    });
-  }, []);
-
-
-  const closeSheet = useCallback(() => {
-    sheetRef.current?.dismiss();
-  }, []);
-
-  // useEffect(() => {
-  //   const t = setTimeout(() => {
-  //     fetchForCurrentMap();
-  //   }, 600);
-
-  //   return () => clearTimeout(t);
-  // }, [fetchForCurrentMap]);
-
 
   return (
     <View style={{ flex: 1 }}>
@@ -296,11 +321,13 @@ export default function LearnerMap() {
           fetchForCurrentMap();
         }}
         onMapIdle={() => {
-          fetchForCurrentMap();
-        }} onCameraChanged={(e) => {
+          onRegionDidChangeDebounced();
+        }}
+        onCameraChanged={(e) => {
           const z = e?.properties?.zoom;
           if (typeof z === "number") {
             currentZoomRef.current = z;
+            setZoomLevel(z);
           }
         }}
         logoEnabled={false}
@@ -309,7 +336,6 @@ export default function LearnerMap() {
         scaleBarEnabled={false}
         rotateEnabled
         pitchEnabled
-
       >
         <Mapbox.Camera
           ref={(r) => {
@@ -318,84 +344,157 @@ export default function LearnerMap() {
           defaultSettings={{
             centerCoordinate: DUBLIN_CENTER,
             zoomLevel: INITIAL_ZOOM,
-            pitch: 55,     // 0 = flat, ~45–65 feels 3D
-            heading: -20,  // rotate a bit (optional)
+            pitch: 55,
+            heading: -20,
           }}
         />
 
         <StyleImport
           id="basemap"
           existing
-          config={
-            {
-              theme: "faded",
-              lightPreset: "day", // or "day" | "dawn" | "night"
-            } as any
-          }
+          config={{ theme: "faded", lightPreset: "day" } as any}
         />
-        {/* <Mapbox.VectorSource id="composite" url="mapbox://mapbox.mapbox-streets-v8">
-          <Mapbox.FillExtrusionLayer
-            id="3d-buildings"
-            sourceLayerID="building"
-            minZoomLevel={14}
-            maxZoomLevel={100}
-            style={{
-              fillExtrusionHeight: ["get", "height"],
-              fillExtrusionBase: ["get", "min_height"],
-              fillExtrusionOpacity: 0.6,
-            }}
-          />
-        </Mapbox.VectorSource> */}
 
-        {sessions
-          .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng))
-          .map((s) => (
-            <Mapbox.MarkerView key={s.sessionId} coordinate={[s.lng, s.lat]}>
-              <View
-                style={{ width: 72, height: 72, alignItems: "center", justifyContent: "center" }}
-                collapsable={false}
+        {showClusterSource ? (
+          <Mapbox.ShapeSource
+            id="sessions-clusters"
+            ref={(r) => {
+              shapeSourceRef.current = r;
+            }}
+            shape={sessionFeatureCollection}
+            cluster
+            clusterRadius={CLUSTER_RADIUS}
+            clusterMaxZoomLevel={CLUSTER_SWITCH_ZOOM}
+            onPress={handleShapeSourcePress}
+          >
+            {[
+              <Mapbox.CircleLayer
+                key="cluster-circles"
+                id="cluster-circles"
+                filter={["has", "point_count"]}
+                style={{
+                  circleColor: "#111111",
+                  circleOpacity: 0.9,
+                  circleStrokeWidth: 2,
+                  circleStrokeColor: "#ffffff",
+                  circleRadius: [
+                    "step",
+                    ["get", "point_count"],
+                    22,
+                    8,
+                    26,
+                    20,
+                    30,
+                    40,
+                    36,
+                  ],
+                }}
+              />,
+              <Mapbox.SymbolLayer
+                key="cluster-count"
+                id="cluster-count"
+                filter={["has", "point_count"]}
+                style={{
+                  textField: ["get", "point_count_abbreviated"],
+                  textSize: 13,
+                  textColor: "#ffffff",
+                  textIgnorePlacement: true,
+                  textAllowOverlap: true,
+                }}
+              />,
+              <Mapbox.CircleLayer
+                key="singleton-circles"
+                id="singleton-circles"
+                filter={["!", ["has", "point_count"]]}
+                style={{
+                  circleColor: "#111111",
+                  circleOpacity: 0.9,
+                  circleStrokeWidth: 2,
+                  circleStrokeColor: "#ffffff",
+                  circleRadius: 18,
+                }}
+              />,
+              <Mapbox.SymbolLayer
+                key="singleton-count"
+                id="singleton-count"
+                filter={["!", ["has", "point_count"]]}
+                style={{
+                  textField: "1",
+                  textSize: 12,
+                  textColor: "#ffffff",
+                  textIgnorePlacement: true,
+                  textAllowOverlap: true,
+                }}
+              />,
+            ]}
+          </Mapbox.ShapeSource>
+        ) : null}
+
+        {showCustomMarkers &&
+          sessions
+            .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng))
+            .map((s) => (
+              <Mapbox.MarkerView
+                key={s.sessionId}
+                coordinate={[s.lng, s.lat]}
+                allowOverlap={true}
               >
-                {/* <Pressable onPress={() => openPreview(s)}> */}
-                <Pressable
-                  onPress={() => {
-                    console.log("Navigating to", s.sessionId);
-                    router.push(`/(modal)/session/${s.sessionId}`);
-                  }}
+                <View
                   style={{
-                    width: 64,
-                    height: 64,
+                    width: 72,
+                    height: 72,
                     alignItems: "center",
                     justifyContent: "center",
                   }}
+                  collapsable={false}
                 >
-                  <TeacherMarker
-                    avatarUrl={s.teacherAvatarUrl}
-                    category={normalizeCategory(s.sessionCategory)}
-                    selected={selected?.sessionId === s.sessionId}
-                    onReady={() => { }}
-                  />
-                </Pressable>
-              </View>
-            </Mapbox.MarkerView>
-          ))}
+                  <Pressable
+                    onPress={() => {
+                      router.push(`/(modal)/session/${s.sessionId}`);
+                    }}
+                    style={{
+                      width: 64,
+                      height: 64,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <TeacherMarker
+                      avatarUrl={s.teacherAvatarUrl}
+                      category={normalizeCategory(s.sessionCategory)}
+                      selected={false}
+                      onReady={() => {}}
+                    />
+                  </Pressable>
+                </View>
+              </Mapbox.MarkerView>
+            ))}
       </Mapbox.MapView>
 
-
       {isMapLoading ? (
-        <View style={{ position: "absolute", top: 110, left: 16, padding: 8, backgroundColor: "white", borderRadius: 10 }}>
+        <View
+          style={{
+            position: "absolute",
+            top: Platform.select({ ios: 165, android: 145 }),
+            left: 16,
+            backgroundColor: "white",
+            paddingHorizontal: 10,
+            paddingVertical: 8,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: "rgba(0,0,0,0.08)",
+          }}
+        >
           <Text style={{ fontWeight: "700" }}>Loading…</Text>
         </View>
       ) : null}
-      {/* Top bar */}
+
       <View
         style={{
           position: "absolute",
           top: Platform.select({ ios: 60, android: 40 }),
           left: 16,
           right: 16,
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
         }}
       >
         <View
@@ -405,116 +504,65 @@ export default function LearnerMap() {
             paddingHorizontal: 12,
             borderRadius: 14,
             borderWidth: 1,
-            flex: 1,
-            marginRight: 10,
+            borderColor: "rgba(0,0,0,0.08)",
+            marginBottom: 10,
           }}
         >
           <Text style={{ fontWeight: "700" }}>Browse classes near you</Text>
           {locError ? <Text style={{ marginTop: 4 }}>{locError}</Text> : null}
         </View>
 
-        <Pressable
-          onPress={handleLogout}
-          style={{
-            backgroundColor: "black",
-            paddingVertical: 10,
-            paddingHorizontal: 12,
-            borderRadius: 14,
-          }}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingRight: 8 }}
+          style={{ marginBottom: 10 }}
         >
-          <Text style={{ color: "white", fontWeight: "700" }}>Logout</Text>
-        </Pressable>
-      </View>
+          {CATEGORY_OPTIONS.map((category) => {
+            const selected = selectedCategory === category;
 
-
-      {/* Bottom Sheet */}
-      {/* <BottomSheetModal
-        ref={sheetRef}
-        snapPoints={snapPoints}
-        enablePanDownToClose
-        onDismiss={() => setSelected(null)}
-        backgroundStyle={{ backgroundColor: "white", borderWidth: 1 }}
-        handleIndicatorStyle={{ opacity: 0.4 }}
-      >
-        <BottomSheetView style={{ flex: 1 }}>
-          {!selected ? (
-            <View style={{ padding: 16 }}>
-              <Text style={{ fontSize: 16, fontWeight: "800" }}>
-                Tap a marker to preview a class
-              </Text>
-            </View>
-          ) : (
-            <View style={{ flex: 1 }}>
-              {selected.thumbnailUrl ? (
-                <Image
-                  source={{ uri: selected.thumbnailUrl }}
-                  style={{ width: "100%", height: 130 }}
-                  resizeMode="cover"
-                />
-              ) : null}
-
-              <View style={{ padding: 14, gap: 6 }}>
-                <Text style={{ fontSize: 18, fontWeight: "800" }}>
-                  {selected.title}
-                </Text>
-
-                <Text>
-                  €{selected.price} · {selected.teacherName}
-                </Text>
-
-                <Text>{formatStart(selected.startTimeISO)}</Text>
-
-                <Text style={{ marginTop: 6 }}>
-                  👥 {selected.attendeeCount ?? 0} attending
-                </Text>
-
-                <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
-                  <Pressable
-                    onPress={() => {
-                      // Later: booking flow (guest/login gate, profile photo gate)
-                      closeSheet();
-                    }}
-                    style={{
-                      flex: 1,
-                      backgroundColor: "black",
-                      paddingVertical: 12,
-                      borderRadius: 12,
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: "white", fontWeight: "700" }}>
-                      Reserve
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => {
-                      // Later: navigate to teacher profile / session details
-                      closeSheet();
-                    }}
-                    style={{
-                      flex: 1,
-                      borderWidth: 1,
-                      paddingVertical: 12,
-                      borderRadius: 12,
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ fontWeight: "700" }}>Details</Text>
-                  </Pressable>
-                </View>
-
-                <Pressable
-                  onPress={closeSheet}
-                  style={{ marginTop: 10, alignItems: "center" }}
+            return (
+              <Pressable
+                key={category}
+                onPress={() => setSelectedCategory(category)}
+                style={{
+                  backgroundColor: selected ? "black" : "white",
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: "rgba(0,0,0,0.12)",
+                  marginRight: 8,
+                }}
+              >
+                <Text
+                  style={{
+                    color: selected ? "white" : "black",
+                    fontWeight: "700",
+                    textTransform: "capitalize",
+                  }}
                 >
-                  <Text style={{ fontWeight: "600" }}>Dismiss</Text>
-                </Pressable>
-              </View>
-            </View>
-          )}
-        </BottomSheetView>
-      </BottomSheetModal> */}
+                  {category}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        <View style={{ alignItems: "flex-end" }}>
+          <Pressable
+            onPress={handleLogout}
+            style={{
+              backgroundColor: "black",
+              paddingVertical: 10,
+              paddingHorizontal: 12,
+              borderRadius: 14,
+            }}
+          >
+            <Text style={{ color: "white", fontWeight: "700" }}>Logout</Text>
+          </Pressable>
+        </View>
+      </View>
     </View>
   );
 }
