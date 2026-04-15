@@ -1,7 +1,8 @@
 import { useLocalSearchParams, router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   Text,
@@ -19,9 +20,18 @@ type SessionDetail = {
   start_time: string;
   duration: number;
   price: number;
+  max_participants: number;
+  bookings_count?: number;
+  spots_left?: number;
+  attendee_first_names?: string[];
   class?: { title?: string; description?: string; category?: string };
   teacher?: { id: string; name?: string; avatarUrl?: string };
 };
+
+function isPast(dateString?: string) {
+  if (!dateString) return false;
+  return new Date(dateString).getTime() < Date.now();
+}
 
 export default function SessionPanel() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -32,6 +42,7 @@ export default function SessionPanel() {
 
   const [following, setFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+  const [reserveLoading, setReserveLoading] = useState(false);
 
   const panelLeftMargin = "0%";
 
@@ -98,6 +109,94 @@ export default function SessionPanel() {
     ? new Date(session.start_time).toLocaleString()
     : "";
   const price = session?.price ?? 0;
+  const spotsLeft = session?.spots_left ?? null;
+  const bookingsCount = session?.bookings_count ?? 0;
+  const attendeeFirstNames = session?.attendee_first_names ?? [];
+
+  const sessionIsPast = useMemo(
+    () => isPast(session?.start_time),
+    [session?.start_time],
+  );
+
+  const sessionIsFull = useMemo(() => {
+    if (spotsLeft === null) return false;
+    return spotsLeft <= 0;
+  }, [spotsLeft]);
+
+  const canReserve =
+    !loading && !error && !!session?.id && !sessionIsPast && !sessionIsFull;
+
+  const reserveButtonLabel = useMemo(() => {
+    if (reserveLoading) return "Opening...";
+    if (loading) return "Loading...";
+    if (error) return "Unavailable";
+    if (sessionIsPast) return "Session started";
+    if (sessionIsFull) return "Full";
+    return "Reserve";
+  }, [reserveLoading, loading, error, sessionIsPast, sessionIsFull]);
+
+  async function handleReservePress() {
+    if (reserveLoading) return;
+
+    if (!session?.id) {
+      Alert.alert("Session unavailable", "This session could not be opened.");
+      return;
+    }
+
+    if (sessionIsPast) {
+      Alert.alert(
+        "Session unavailable",
+        "This session has already started or is in the past.",
+      );
+      return;
+    }
+
+    if (sessionIsFull) {
+      Alert.alert(
+        "Session full",
+        "This session is fully booked. Try another class nearby.",
+      );
+      return;
+    }
+
+    try {
+      setReserveLoading(true);
+      router.push(`/(modal)/booking/${session.id}`);
+    } finally {
+      setReserveLoading(false);
+    }
+  }
+
+  let attendanceLabel: string | null = null;
+
+  if (spotsLeft !== null) {
+    if (
+      attendeeFirstNames.length >= 2 &&
+      bookingsCount > attendeeFirstNames.length
+    ) {
+      attendanceLabel = `${attendeeFirstNames[0]} + ${bookingsCount - 1} others going · ${
+        spotsLeft === 0 ? "Full" : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
+      }`;
+    } else if (attendeeFirstNames.length === 2) {
+      attendanceLabel = `${attendeeFirstNames[0]} and ${attendeeFirstNames[1]} going · ${
+        spotsLeft === 0 ? "Full" : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
+      }`;
+    } else if (attendeeFirstNames.length === 1 && bookingsCount > 1) {
+      attendanceLabel = `${attendeeFirstNames[0]} + ${bookingsCount - 1} others going · ${
+        spotsLeft === 0 ? "Full" : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
+      }`;
+    } else if (attendeeFirstNames.length === 1) {
+      attendanceLabel = `${attendeeFirstNames[0]} is going · ${
+        spotsLeft === 0 ? "Full" : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
+      }`;
+    } else if (bookingsCount > 0) {
+      attendanceLabel = `${bookingsCount} ${bookingsCount === 1 ? "person" : "people"} going · ${
+        spotsLeft === 0 ? "Full" : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
+      }`;
+    } else {
+      attendanceLabel = `Be the first to join · ${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`;
+    }
+  }
 
   return (
     <Pressable
@@ -166,6 +265,23 @@ export default function SessionPanel() {
           {start ? <Text style={{ marginTop: 6 }}>{start}</Text> : null}
           <Text style={{ marginTop: 6, fontWeight: "800" }}>€{price}</Text>
 
+          {attendanceLabel ? (
+            <Text
+              style={{
+                marginTop: 8,
+                fontWeight: "800",
+              }}
+            >
+              {attendanceLabel}
+            </Text>
+          ) : null}
+
+          {sessionIsPast ? (
+            <Text style={{ marginTop: 8, color: "#9b2c2c", fontWeight: "700" }}>
+              This session has already started or is in the past.
+            </Text>
+          ) : null}
+
           <Pressable
             onPress={() => router.back()}
             style={{ position: "absolute", right: 14, top: 14, padding: 8 }}
@@ -217,20 +333,18 @@ export default function SessionPanel() {
           }}
         >
           <Pressable
-            onPress={() => {
-              if (session?.id) {
-                router.push(`/(modal)/booking/${session.id}`);
-              }
-            }}
-            disabled={loading || !!error}
+            onPress={handleReservePress}
+            disabled={!canReserve || reserveLoading}
             style={{
-              backgroundColor: loading || error ? "#666" : "black",
+              backgroundColor: !canReserve || reserveLoading ? "#666" : "black",
               paddingVertical: 14,
               borderRadius: 14,
               alignItems: "center",
             }}
           >
-            <Text style={{ color: "white", fontWeight: "900" }}>Reserve</Text>
+            <Text style={{ color: "white", fontWeight: "900" }}>
+              {reserveButtonLabel}
+            </Text>
           </Pressable>
         </View>
       </Pressable>

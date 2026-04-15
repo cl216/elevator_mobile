@@ -3,20 +3,6 @@ import { View, Text, TextInput, Pressable, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { api } from '../../src/api/client';
 import { authStore } from '../../src/store/auth.store';
-import type { UserRole } from '../../src/types/auth';
-
-// Decode JWT payload (base64url) in Expo Go without extra libs
-function decodeJwtPayload(token: string): any {
-  const parts = token.split('.');
-  if (parts.length !== 3) throw new Error('Invalid JWT');
-
-  const payload = parts[1];
-  const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-
-  const json = globalThis.atob(padded);
-  return JSON.parse(json);
-}
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -29,22 +15,47 @@ export default function LoginScreen() {
 
       const res = await api.post('/auth/login', { email, password });
       const token: string | undefined = res.data?.access_token;
+      const hasTeacherProfile: boolean = !!res.data?.user?.hasTeacherProfile;
 
-      if (!token) throw new Error('No access_token returned from /auth/login');
+      if (!token) {
+        throw new Error('No access_token returned from /auth/login');
+      }
 
-      const payload = decodeJwtPayload(token);
-      const role: UserRole = payload?.role ?? 'LEARNER';
+await authStore.getState().setAuth(
+  res.data.access_token,
+  res.data.refresh_token,
+  !!res.data.user?.hasTeacherProfile,
+);      await authStore.getState().refreshMe();
 
-      await authStore.getState().setAuth(token, role);
-
-      // Send user to the routing gate, which redirects based on role
       router.replace('/');
     } catch (e: any) {
       const msg =
         e?.response?.data?.message?.toString?.() ??
         e?.message ??
         'Unknown error';
-      Alert.alert('Login failed', msg);
+
+      const normalizedMsg = String(msg);
+
+      if (normalizedMsg.includes('Please verify your email before logging in')) {
+        Alert.alert(
+          'Verify your email',
+          'Please check your email for your verification link before logging in.',
+          [
+            {
+              text: 'Resend verification',
+              onPress: () =>
+                router.push({
+                  pathname: '/(auth)/verify-email',
+                  params: { email },
+                }),
+            },
+            { text: 'OK' },
+          ],
+        );
+        return;
+      }
+
+      Alert.alert('Login failed', normalizedMsg);
     } finally {
       setLoading(false);
     }
@@ -85,6 +96,10 @@ export default function LoginScreen() {
         <Text style={{ color: 'white', fontWeight: '600' }}>
           {loading ? 'Logging in...' : 'Login'}
         </Text>
+      </Pressable>
+
+      <Pressable onPress={() => router.push('/(auth)/forgot-password')}>
+        <Text style={{ textAlign: 'center' }}>Forgot password?</Text>
       </Pressable>
 
       <Pressable onPress={() => router.push('/(auth)/register')}>

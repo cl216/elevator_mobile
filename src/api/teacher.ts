@@ -23,6 +23,8 @@ export async function getTeacherProfile(teacherId: string) {
     bio: string | null;
     image_url: string | null;
     joined_at: string;
+    average_rating: number | null;
+    review_count: number;
   };
 }
 

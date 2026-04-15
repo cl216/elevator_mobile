@@ -4,7 +4,8 @@ export default function ModalLayout() {
   return (
     <Stack
       screenOptions={{
-        headerShown: false
+        headerShown: false,
+        presentation: "modal",
       }}
     />
   );
