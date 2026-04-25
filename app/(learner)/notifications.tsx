@@ -208,6 +208,19 @@ export default function NotificationsScreen() {
       return;
     }
 
+    if (type === "private_session_request_declined") {
+      return;
+    }
+
+    if (type === "private_session_request_accepted") {
+      if (sessionId) {
+        router.push(`/(learner)/session/${sessionId}`);
+        return;
+      }
+
+      return;
+    }
+
     if (
       type === "new_booking_started" ||
       type === "booking_confirmed_teacher" ||
@@ -244,8 +257,32 @@ export default function NotificationsScreen() {
     }
   }
 
+  function renderTeacherResponseMessage(item: AppNotification) {
+    const teacherResponseMessage = item.payload?.teacher_response_message;
+
+    if (
+      item.type !== "private_session_request_declined" ||
+      !teacherResponseMessage
+    ) {
+      return null;
+    }
+
+    return (
+      <View style={styles.teacherMessageBox}>
+        <Text style={styles.teacherMessageLabel}>Teacher response</Text>
+        <Text style={styles.teacherMessageText}>
+          {String(teacherResponseMessage)}
+        </Text>
+      </View>
+    );
+  }
+
   function renderNotificationCard(item: AppNotification) {
     const hasSession = !!item.payload?.session_id;
+    const isPrivateRequestAccepted =
+      item.type === "private_session_request_accepted";
+    const isPrivateRequestDeclined =
+      item.type === "private_session_request_declined";
 
     return (
       <NotificationsCard
@@ -255,7 +292,10 @@ export default function NotificationsScreen() {
         subtitle={formatDate(item.created_at)}
         highlight={!item.read}
       >
-        <Pressable onPress={() => void handleOpenNotification(item)}>
+        <Pressable
+          onPress={() => void handleOpenNotification(item)}
+          disabled={isPrivateRequestDeclined}
+        >
           <View style={styles.notificationBodyWrap}>
             <View style={styles.notificationTitleRow}>
               <View style={styles.notificationTitleTextWrap}>
@@ -267,6 +307,8 @@ export default function NotificationsScreen() {
             </View>
           </View>
         </Pressable>
+
+        {renderTeacherResponseMessage(item)}
 
         <View style={styles.cardFooter}>
           <Text style={styles.dateText}>{formatDate(item.created_at)}</Text>
@@ -292,6 +334,20 @@ export default function NotificationsScreen() {
               >
                 <Text style={styles.secondaryPillText}>Open</Text>
               </Pressable>
+            </View>
+          ) : isPrivateRequestAccepted ? (
+            <Pressable
+              onPress={() => void handleOpenNotification(item)}
+              style={({ pressed }) => [
+                styles.secondaryPill,
+                pressed && styles.secondaryPillPressed,
+              ]}
+            >
+              <Text style={styles.secondaryPillText}>Open session</Text>
+            </Pressable>
+          ) : isPrivateRequestDeclined ? (
+            <View style={styles.inlineStatusPill}>
+              <Text style={styles.inlineStatusPillText}>Viewed here</Text>
             </View>
           ) : (
             <Pressable
@@ -333,7 +389,7 @@ export default function NotificationsScreen() {
                 <View style={styles.heroTextWrap}>
                   <Text style={styles.heroTitle}>Notifications</Text>
                   <Text style={styles.heroSubtitle}>
-                    Updates about your bookings and sessions.
+                    Updates about your bookings, sessions, and private requests.
                   </Text>
                 </View>
 
@@ -435,10 +491,11 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: {
-  paddingHorizontal: 20,
-  paddingTop: 24,
-  paddingBottom: 40,
-  flexGrow: 1,  },
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
+    flexGrow: 1,
+  },
 
   hero: {
     marginBottom: 22,
@@ -646,6 +703,27 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  teacherMessageBox: {
+    marginTop: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+    backgroundColor: COLORS.accentSoft,
+    padding: 12,
+  },
+
+  teacherMessageLabel: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    fontWeight: "800",
+    marginBottom: 6,
+  },
+
+  teacherMessageText: {
+    color: COLORS.text,
+    lineHeight: 20,
+  },
+
   cardFooter: {
     marginTop: 14,
     paddingTop: 12,
@@ -687,6 +765,21 @@ const styles = StyleSheet.create({
   secondaryPillText: {
     color: COLORS.text,
     fontWeight: "800",
+  },
+
+  inlineStatusPill: {
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: COLORS.accentSoft,
+  },
+
+  inlineStatusPillText: {
+    color: COLORS.text,
+    fontWeight: "800",
+    fontSize: 12,
   },
 
   primaryButton: {

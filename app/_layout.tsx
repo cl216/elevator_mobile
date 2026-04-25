@@ -116,6 +116,7 @@ export default function RootLayout() {
     const handleNotificationNavigation = (data: any) => {
       const bookingId = data?.booking_id;
       const sessionId = data?.session_id;
+      const privateSessionRequestId = data?.private_session_request_id;
       const type = data?.type;
 
       if (
@@ -147,6 +148,34 @@ export default function RootLayout() {
         }
 
         router.push("/(learner)/bookings");
+        return;
+      }
+
+      if (type === "private_session_request_declined") {
+        router.push("/(learner)/notifications");
+        return;
+      }
+
+      if (type === "private_session_request_accepted") {
+        if (sessionId) {
+          router.push({
+            pathname: "/(learner)/session/[id]",
+            params: { id: String(sessionId) },
+          });
+          return;
+        }
+
+        if (privateSessionRequestId) {
+          router.push("/(learner)/notifications");
+          return;
+        }
+
+        router.push("/(learner)/notifications");
+        return;
+      }
+
+      if (type === "private_session_request_created") {
+        router.push("/(teacher)/private-session-requests");
         return;
       }
 

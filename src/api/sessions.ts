@@ -1,5 +1,53 @@
 import { api } from "./client";
 
+export type TeacherSessionRow = {
+  id: string;
+  start_time: string;
+  end_time?: string;
+  duration: number;
+  max_participants: number;
+  price: number;
+  rough_location?: string | null;
+  title: string;
+  category: string;
+  bookings_count?: string | number;
+  status?: "ACTIVE" | "CANCELLED" | string;
+  cancelled_at?: string | null;
+  session_type?: "GROUP" | "PRIVATE" | string;
+  private_invitee_user_id?: string | null;
+};
+
+export type SessionDetail = {
+  id: string;
+  class_id?: string;
+  start_time: string;
+  duration: number;
+  price: number;
+  max_participants: number;
+  bookings_count?: number;
+  spots_left?: number;
+  attendee_first_names?: string[];
+  status?: "ACTIVE" | "CANCELLED" | string;
+  cancelled_at?: string | null;
+  session_type?: "GROUP" | "PRIVATE" | string;
+  private_invitee_user_id?: string | null;
+  rough_location?: string | null;
+  arrival_instructions?: string | null;
+  image_urls?: string[];
+  lat?: number;
+  lng?: number;
+  class?: {
+    title?: string | null;
+    description?: string | null;
+    category?: string | null;
+  };
+  teacher?: {
+    id: string;
+    name?: string | null;
+    avatarUrl?: string | null;
+  };
+};
+
 export async function createSession(input: {
   title: string;
   category: string;
@@ -22,12 +70,12 @@ export async function createSession(input: {
 
 export async function getMySessions() {
   const res = await api.get("/sessions/me");
-  return res.data;
+  return (Array.isArray(res.data) ? res.data : []) as TeacherSessionRow[];
 }
 
 export async function getSessionById(sessionId: string) {
   const res = await api.get(`/sessions/${sessionId}`);
-  return res.data;
+  return res.data as SessionDetail;
 }
 
 export async function updateSession(
@@ -53,10 +101,7 @@ export async function updateSession(
   return res.data;
 }
 
-export async function duplicateSession(
-  sessionId: string,
-  start_time: string,
-) {
+export async function duplicateSession(sessionId: string, start_time: string) {
   const res = await api.post(`/sessions/${sessionId}/duplicate`, {
     start_time,
   });

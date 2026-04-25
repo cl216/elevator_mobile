@@ -223,84 +223,109 @@ export default function TeacherProfileModal() {
           ) : profile ? (
             <>
               <View style={{ alignItems: "center", marginBottom: 20 }}>
-                {profile.image_url ? (
-                  <Image
-                    source={{ uri: profile.image_url }}
-                    style={{
-                      width: 96,
-                      height: 96,
-                      borderRadius: 48,
-                      marginBottom: 12,
-                    }}
-                  />
-                ) : (
-                  <View
-                    style={{
-                      width: 96,
-                      height: 96,
-                      borderRadius: 48,
-                      marginBottom: 12,
-                      backgroundColor: "#ddd",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Text style={{ fontWeight: "900", fontSize: 28 }}>
-                      {profile.full_name?.[0] ?? "T"}
-                    </Text>
-                  </View>
-                )}
+  {profile.image_url ? (
+    <Image
+      source={{ uri: profile.image_url }}
+      style={{
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        marginBottom: 12,
+      }}
+    />
+  ) : (
+    <View
+      style={{
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        marginBottom: 12,
+        backgroundColor: "#ddd",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Text style={{ fontWeight: "900", fontSize: 28 }}>
+        {profile.full_name?.[0] ?? "T"}
+      </Text>
+    </View>
+  )}
 
-                <Text style={{ fontSize: 22, fontWeight: "900" }}>
-                  {profile.full_name}
-                </Text>
+  <Text style={{ fontSize: 22, fontWeight: "900" }}>
+    {profile.full_name}
+  </Text>
 
-                <View
-                  style={{
-                    marginTop: 10,
-                    alignItems: "center",
-                    borderWidth: 1,
-                    borderColor: "rgba(0,0,0,0.08)",
-                    backgroundColor: "#fafafa",
-                    borderRadius: 14,
-                    paddingHorizontal: 14,
-                    paddingVertical: 10,
-                    minWidth: 150,
-                  }}
-                >
-                  <Text style={{ fontSize: 18, letterSpacing: 1 }}>
-                    {ratingStars}
-                  </Text>
-                  <Text style={{ marginTop: 4, opacity: 0.72, fontWeight: "700" }}>
-                    {ratingLabel}
-                  </Text>
-                </View>
+  <View
+    style={{
+      marginTop: 10,
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: "rgba(0,0,0,0.08)",
+      backgroundColor: "#fafafa",
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      minWidth: 150,
+    }}
+  >
+    <Text style={{ fontSize: 18, letterSpacing: 1 }}>
+      {ratingStars}
+    </Text>
+    <Text style={{ marginTop: 4, opacity: 0.72, fontWeight: "700" }}>
+      {ratingLabel}
+    </Text>
+  </View>
 
-                {joinedLabel ? (
-                  <Text style={{ marginTop: 10, opacity: 0.7 }}>{joinedLabel}</Text>
-                ) : null}
+  {joinedLabel ? (
+    <Text style={{ marginTop: 10, opacity: 0.7 }}>{joinedLabel}</Text>
+  ) : null}
 
-                <Pressable
-                  onPress={toggleFollow}
-                  disabled={followLoading}
-                  style={{
-                    marginTop: 16,
-                    backgroundColor: following ? "#eee" : "black",
-                    paddingHorizontal: 18,
-                    paddingVertical: 10,
-                    borderRadius: 12,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: following ? "black" : "white",
-                      fontWeight: "800",
-                    }}
-                  >
-                    {followLoading ? "..." : following ? "Following" : "Follow"}
-                  </Text>
-                </Pressable>
-              </View>
+  <Pressable
+    onPress={toggleFollow}
+    disabled={followLoading}
+    style={{
+      marginTop: 16,
+      backgroundColor: following ? "#eee" : "black",
+      paddingHorizontal: 18,
+      paddingVertical: 10,
+      borderRadius: 12,
+    }}
+  >
+    <Text
+      style={{
+        color: following ? "black" : "white",
+        fontWeight: "800",
+      }}
+    >
+      {followLoading ? "..." : following ? "Following" : "Follow"}
+    </Text>
+  </Pressable>
+
+  <Pressable
+    onPress={() =>
+      router.push({
+        pathname: "/(modal)/private-session-request/[teacherId]",
+        params: {
+          teacherId: profile.id,
+          teacherName: profile.full_name,
+        },
+      })
+    }
+    style={{
+      marginTop: 12,
+      backgroundColor: "#111",
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      borderRadius: 12,
+      alignItems: "center",
+      minWidth: 220,
+    }}
+  >
+    <Text style={{ color: "white", fontWeight: "800" }}>
+      Request 1:1 session
+    </Text>
+  </Pressable>
+</View>
 
               <View
                 style={{

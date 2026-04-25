@@ -28,34 +28,40 @@ await authStore.getState().setAuth(
 );      await authStore.getState().refreshMe();
 
       router.replace('/');
-    } catch (e: any) {
-      const msg =
-        e?.response?.data?.message?.toString?.() ??
-        e?.message ??
-        'Unknown error';
+} catch (e: any) {
+  console.log('LOGIN ERROR FULL:', e);
+  console.log('LOGIN ERROR MESSAGE:', e?.message);
+  console.log('LOGIN ERROR RESPONSE:', e?.response?.data);
+  console.log('LOGIN ERROR CONFIG URL:', e?.config?.baseURL, e?.config?.url);
 
-      const normalizedMsg = String(msg);
+  const msg =
+    e?.response?.data?.message?.toString?.() ??
+    e?.message ??
+    'Unknown error';
 
-      if (normalizedMsg.includes('Please verify your email before logging in')) {
-        Alert.alert(
-          'Verify your email',
-          'Please check your email for your verification link before logging in.',
-          [
-            {
-              text: 'Resend verification',
-              onPress: () =>
-                router.push({
-                  pathname: '/(auth)/verify-email',
-                  params: { email },
-                }),
-            },
-            { text: 'OK' },
-          ],
-        );
-        return;
-      }
+  const normalizedMsg = String(msg);
 
-      Alert.alert('Login failed', normalizedMsg);
+  if (normalizedMsg.includes('Please verify your email before logging in')) {
+    Alert.alert(
+      'Verify your email',
+      'Please check your email for your verification link before logging in.',
+      [
+        {
+          text: 'Resend verification',
+          onPress: () =>
+            router.push({
+              pathname: '/(auth)/verify-email',
+              params: { email },
+            }),
+        },
+        { text: 'OK' },
+      ],
+    );
+    return;
+  }
+
+  Alert.alert('Login failed', normalizedMsg);
+
     } finally {
       setLoading(false);
     }

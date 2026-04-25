@@ -100,7 +100,7 @@ const COLORS = {
 
   border: "rgba(110,145,255,0.12)",
   borderStrong: "rgba(110,145,255,0.28)",
-  divider: "rgba(255,255,255,0.06)", // 👈 ADD THIS
+  divider: "rgba(255,255,255,0.06)",
 
   accent: "#6F92FF",
   accentSoft: "rgba(111,146,255,0.12)",
@@ -434,6 +434,7 @@ export default function LearnerMap() {
   const [sessions, setSessions] = useState<MapSessionPreview[]>([]);
   const [locError, setLocError] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(INITIAL_ZOOM);
+  const [visibleBBox, setVisibleBBox] = useState<BBox | null>(null);
 
   const [showSearchThisArea, setShowSearchThisArea] = useState(false);
   const [pendingBBox, setPendingBBox] = useState<BBox | null>(null);
@@ -474,6 +475,29 @@ export default function LearnerMap() {
     );
   }, [categoryMenuItems, selectedCategory]);
 
+  const visibleSessions = useMemo(() => {
+    if (!visibleBBox) return [];
+
+    return sessions.filter((s) => {
+      return (
+        s.lng >= visibleBBox.west &&
+        s.lng <= visibleBBox.east &&
+        s.lat >= visibleBBox.south &&
+        s.lat <= visibleBBox.north
+      );
+    });
+  }, [sessions, visibleBBox]);
+
+  const visibleSessionCount = visibleSessions.length;
+
+  const foundCountLabel = useMemo(() => {
+    if (!isInitialLocationResolved) return "Finding sessions...";
+    if (isMapLoading) return "Searching...";
+    if (visibleSessionCount === 0) return "No sessions found";
+    if (visibleSessionCount === 1) return "1 session found";
+    return `${visibleSessionCount} sessions found`;
+  }, [isInitialLocationResolved, isMapLoading, visibleSessionCount]);
+
   const shouldShowNearbyCompactList =
     emptyAreaStateVisible &&
     !showSearchThisArea &&
@@ -483,6 +507,18 @@ export default function LearnerMap() {
     emptyAreaStateVisible &&
     !showSearchThisArea &&
     nearbySuggestions.length === 0;
+
+  const updateVisibleBBox = useCallback(async () => {
+    try {
+      const bounds = await mapRef.current?.getVisibleBounds();
+      const bbox = boundsToBBox(bounds);
+      if (bbox) {
+        setVisibleBBox(bbox);
+      }
+    } catch (e) {
+      console.log("updateVisibleBBox error", e);
+    }
+  }, []);
 
   useEffect(() => {
     Animated.timing(categoryMenuAnim, {
@@ -771,6 +807,8 @@ export default function LearnerMap() {
       const bbox = boundsToBBox(bounds);
       if (!bbox) return;
 
+      setVisibleBBox(bbox);
+
       const markerBBox = padBBox(bbox, MARKER_FETCH_PAD);
       const next = await fetchSessionsForBBox(markerBBox, selectedCategory, {
         commitActiveSearch: true,
@@ -851,6 +889,8 @@ export default function LearnerMap() {
       const bounds = await mapRef.current?.getVisibleBounds();
       const bbox = boundsToBBox(bounds);
       if (!bbox) return;
+
+      setVisibleBBox(bbox);
 
       const markerBBox = padBBox(bbox, MARKER_FETCH_PAD);
       const key = bboxKey(markerBBox, selectedCategory);
@@ -1022,6 +1062,8 @@ export default function LearnerMap() {
         const bbox = boundsToBBox(bounds);
         if (!bbox) return;
 
+        setVisibleBBox(bbox);
+
         const markerBBox = padBBox(bbox, MARKER_FETCH_PAD);
 
         const next = await fetchSessionsForBBox(markerBBox, selectedCategory, {
@@ -1111,6 +1153,8 @@ export default function LearnerMap() {
     setNearbySuggestions([]);
     setShowSearchThisArea(false);
 
+    await updateVisibleBBox();
+
     const next = await fetchSessionsForBBox(pendingBBox, selectedCategory, {
       commitActiveSearch: true,
     });
@@ -1132,6 +1176,7 @@ export default function LearnerMap() {
     pendingKey,
     selectedCategory,
     isMapLoading,
+    updateVisibleBBox,
   ]);
 
   const handleCloseNearbySuggestions = useCallback(() => {
@@ -1280,6 +1325,7 @@ export default function LearnerMap() {
           }}
           onMapIdle={() => {
             prepareSearchThisArea();
+            updateVisibleBBox();
           }}
           onPress={() => {
             setSelectedSessionId(null);
@@ -1456,6 +1502,17 @@ export default function LearnerMap() {
             <Pressable onPress={handleOpenRequestClass} style={styles.requestButton}>
               <Text style={styles.requestButtonText}>Request class in this area</Text>
             </Pressable>
+          </View>
+
+          <View style={styles.resultsPillWrap}>
+            <View style={styles.resultsPill}>
+              <Ionicons
+                name={visibleSessionCount > 0 ? "sparkles-outline" : "search-outline"}
+                size={14}
+                color={COLORS.text}
+              />
+              <Text style={styles.resultsPillText}>{foundCountLabel}</Text>
+            </View>
           </View>
 
           <Animated.View
@@ -1817,7 +1874,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     gap: 10,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   filterButton: {
     minHeight: 42,
@@ -1857,6 +1914,27 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontWeight: "800",
     fontSize: 14,
+  },
+
+  resultsPillWrap: {
+    alignItems: "flex-start",
+    marginBottom: 10,
+  },
+  resultsPill: {
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: COLORS.panelBg,
+    borderWidth: 1,
+    borderColor: COLORS.borderStrong,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  resultsPillText: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "800",
   },
 
   categoryMenuAnimated: {

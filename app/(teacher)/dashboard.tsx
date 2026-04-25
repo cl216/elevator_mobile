@@ -270,7 +270,9 @@ export default function TeacherDashboard() {
                 <View
                   style={[
                     styles.metaBadge,
-                    stripeReady ? styles.metaBadgeSuccess : styles.metaBadgeWarning,
+                    stripeReady
+                      ? styles.metaBadgeSuccess
+                      : styles.metaBadgeWarning,
                   ]}
                 >
                   <Text style={styles.metaBadgeText}>
@@ -292,7 +294,10 @@ export default function TeacherDashboard() {
                 ) : null}
               </DashboardCard>
 
-              <DashboardCard icon="trending-up-outline" title="Learners near you want">
+              <DashboardCard
+                icon="trending-up-outline"
+                title="Learners near you want"
+              >
                 <Text style={styles.bodyText}>
                   Use nearby demand to decide what sessions to run next.
                 </Text>
@@ -323,9 +328,7 @@ export default function TeacherDashboard() {
                               <Text style={styles.listLabel}>
                                 {item.category}
                               </Text>
-                              <Text style={styles.listValue}>
-                                {item.count}
-                              </Text>
+                              <Text style={styles.listValue}>{item.count}</Text>
                             </View>
                           ))}
                         </View>
@@ -342,9 +345,7 @@ export default function TeacherDashboard() {
                               <Text style={styles.listLabel}>
                                 {item.custom_title}
                               </Text>
-                              <Text style={styles.listValue}>
-                                {item.count}
-                              </Text>
+                              <Text style={styles.listValue}>{item.count}</Text>
                             </View>
                           ))}
                         </View>
@@ -397,6 +398,25 @@ export default function TeacherDashboard() {
                 </View>
               </DashboardCard>
 
+              <DashboardCard
+                icon="chatbubble-ellipses-outline"
+                title="Private 1:1 requests"
+              >
+                <Text style={styles.bodyText}>
+                  Review structured learner requests for private sessions and
+                  turn accepted ones into paid sessions in the app.
+                </Text>
+
+                <View style={styles.actionStack}>
+                  <AppButton
+                    title="View private requests"
+                    onPress={() =>
+                      router.push("/(teacher)/private-session-requests")
+                    }
+                  />
+                </View>
+              </DashboardCard>
+
               <DashboardCard icon="settings-outline" title="Account">
                 <Text style={styles.bodyText}>
                   Sign out of your teacher account securely.
@@ -418,10 +438,10 @@ export default function TeacherDashboard() {
 
 const styles = StyleSheet.create({
   content: {
-  paddingHorizontal: 20,
-  paddingTop: 24,
-  paddingBottom: 40,
-  flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
+    flexGrow: 1,
   },
 
   hero: {

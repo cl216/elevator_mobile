@@ -17,6 +17,16 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+
+api.interceptors.request.use((config) => {
+  console.log("REQUEST URL DEBUG:", {
+    baseURL: config.baseURL,
+    url: config.url,
+    full: `${config.baseURL}${config.url}`,
+  });
+  return config;
+});
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {

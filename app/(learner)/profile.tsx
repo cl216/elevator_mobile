@@ -16,15 +16,12 @@ const COLORS = {
   textSoft: "rgba(222,230,247,0.72)",
   textMuted: "rgba(222,230,247,0.52)",
 
-  // 🔽 toned down borders
   border: "rgba(110,145,255,0.12)",
   borderStrong: "rgba(110,145,255,0.28)",
 
-  // 🔽 softer accent system
   accent: "#6F92FF",
   accentSoft: "rgba(111,146,255,0.12)",
 
-  // 🔽 less aggressive button
   button: "#3F6AE0",
   buttonPressed: "#355CC2",
   buttonSecondary: "#121A2C",
@@ -111,7 +108,8 @@ export default function ProfileScreen() {
 
             <Text style={styles.title}>Manage your account</Text>
             <Text style={styles.subtitle}>
-              Payments, teaching access, and account settings in one place.
+              Payments, teaching access, private requests, and account settings
+              in one place.
             </Text>
           </View>
 
@@ -121,6 +119,14 @@ export default function ProfileScreen() {
             body="View saved cards for quicker checkout and manage how you pay."
             cta="View saved cards"
             onPress={() => router.push("/(learner)/payment-methods")}
+          />
+
+          <ProfileCard
+            icon="paper-plane-outline"
+            title="Private session requests"
+            body="Track your private 1:1 requests, review statuses, and see any teacher notes."
+            cta="View requests"
+            onPress={() => router.push("/(learner)/private-session-requests")}
           />
 
           <ProfileCard
@@ -158,25 +164,26 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   screen: {
-  paddingHorizontal: 20,
-  paddingTop: 24,
-  paddingBottom: 40,
-  flexGrow: 1,  },
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
+    flexGrow: 1,
+  },
 
   hero: {
     marginBottom: 18,
   },
 
-heroBadge: {
-  alignSelf: "flex-start",
-  paddingHorizontal: 10,
-  paddingVertical: 6,
-  borderRadius: 999,
-  backgroundColor: "rgba(111,146,255,0.12)",
-  borderWidth: 1,
-  borderColor: "rgba(111,146,255,0.25)",
-  marginBottom: 12,
-},
+  heroBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(111,146,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(111,146,255,0.25)",
+    marginBottom: 12,
+  },
 
   heroBadgeText: {
     color: COLORS.text,
@@ -198,14 +205,14 @@ heroBadge: {
     lineHeight: 22,
   },
 
-cardOuter: {
-  borderRadius: 24,
-  borderWidth: 1.2, // slightly thinner
-  borderColor: COLORS.borderStrong,
-  backgroundColor: COLORS.surface,
-  marginBottom: 14,
-  overflow: "hidden",
-},
+  cardOuter: {
+    borderRadius: 24,
+    borderWidth: 1.2,
+    borderColor: COLORS.borderStrong,
+    backgroundColor: COLORS.surface,
+    marginBottom: 14,
+    overflow: "hidden",
+  },
 
   cardOuterDanger: {
     borderColor: "rgba(110,145,255,0.22)",
@@ -228,17 +235,17 @@ cardOuter: {
     marginBottom: 12,
   },
 
-iconCircle: {
-  width: 42,
-  height: 42,
-  borderRadius: 21,
-  backgroundColor: "rgba(111,146,255,0.18)", // instead of solid blue
-  borderWidth: 1,
-  borderColor: "rgba(111,146,255,0.28)",
-  alignItems: "center",
-  justifyContent: "center",
-  marginRight: 12,
-},
+  iconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(111,146,255,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(111,146,255,0.28)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
 
   iconCircleDanger: {
     backgroundColor: COLORS.surfaceSoft,
@@ -268,27 +275,27 @@ iconCircle: {
     marginBottom: 14,
   },
 
-ctaButton: {
-  minHeight: 48,
-  borderRadius: 16,
-  backgroundColor: "rgba(111,146,255,0.16)",
-  borderWidth: 1,
-  borderColor: "rgba(111,146,255,0.25)",
-  alignItems: "center",
-  justifyContent: "center",
-},
-ctaButtonText: {
-  color: COLORS.text,
-  fontSize: 15,
-  fontWeight: "800",
-},
+  ctaButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: "rgba(111,146,255,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(111,146,255,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  ctaButtonText: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "800",
+  },
 
   ctaButtonSecondary: {
     backgroundColor: COLORS.buttonSecondary,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-
 
   ctaButtonTextSecondary: {
     color: COLORS.text,
