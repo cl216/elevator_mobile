@@ -1,0 +1,22 @@
+map doesnt stay in local area on startup
+
+Move to my area doesnt show up sometimes on load of app
+
+request 121 needs to be more obvious
+
+user profile needs to look nicer.
+
+ensure stripe request flow is working
+
+[Nest] 15140  - 27/04/2026, 17:28:28     LOG [RequestLoggingInterceptor] REQ requestId=d37a5256-316e-4a36-bf9e-e82c4952d55e method=GET url=/sessions/map?north=37.80496930949811&south=37.75206146669546&east=-122.40005138681647&west=-122.4386666131843 userId=anonymous
+[Nest] 15140  - 27/04/2026, 17:28:28     LOG [RequestLoggingInterceptor] RES requestId=d37a5256-316e-4a36-bf9e-e82c4952d55e method=GET url=/sessions/map?north=37.80496930949811&south=37.75206146669546&east=-122.40005138681647&west=-122.4386666131843 userId=anonymous status=200 durationMs=12
+[Nest] 15140  - 27/04/2026, 17:28:28    WARN [GlobalExceptionFilter] HTTP_EXCEPTION method=POST path=/auth/refresh userId=anonymous status=429 message="ThrottlerException: Too Many Requests"
+[Nest] 15140  - 27/04/2026, 17:28:29    WARN [GlobalExceptionFilter] HTTP_EXCEPTION method=POST path=/auth/refresh userId=anonymous status=429 message="ThrottlerException: Too Many Requests"
+[Nest] 15140  - 27/04/2026, 17:28:29    WARN [GlobalExceptionFilter] HTTP_EXCEPTION method=POST path=/auth/refresh userId=anonymous status=429 message="ThrottlerException: Too Many Requests"
+This leads to app crashing
+frontend: ARN  refreshAccessToken rate-limited, keeping current token
+ LOG  REQUEST URL DEBUG: {"baseURL": "http://192.168.1.12:3000", "full": "http://192.168.1.12:3000/auth/refresh", "url": "/auth/refresh"}
+ WARN  refreshAccessToken rate-limited, keeping current token
+ LOG  REQUEST URL DEBUG: {"baseURL": "http://192.168.1.12:3000", "full": "http://192.168.1.12:3000/auth/refresh", "url": "/auth/refresh"}
+ WARN  refreshAccessToken rate-limited, keeping current token
+ LOG  REQUEST URL DEBUG: {"baseURL": "http://192.168.1.12:3000", "full": "http://192.168.1.12:3000/auth/refresh", "url": "/auth/refresh"}

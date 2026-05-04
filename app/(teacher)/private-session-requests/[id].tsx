@@ -1,34 +1,34 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useLocalSearchParams, router } from "expo-router";
-import {
-  ActivityIndicator,
-  Alert,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import Mapbox from "@rnmapbox/maps";
-
-import AppLayout from "@/src/components/layout/AppLayout";
-import { AppScreen } from "@/src/components/ui/AppScreen";
+import { router, useLocalSearchParams } from "expo-router";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  acceptPrivateSessionRequest,
-  declinePrivateSessionRequest,
-  getMyTeacherPrivateSessionRequests,
-  type PrivateSessionRequest,
+    ActivityIndicator,
+    Alert,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+} from "react-native";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
+import { getApprovedCategories } from "@/src/api/categories";
+import {
+    acceptPrivateSessionRequest,
+    declinePrivateSessionRequest,
+    getMyTeacherPrivateSessionRequests,
+    type PrivateSessionRequest,
 } from "@/src/api/privateSessionRequests";
 import {
-  getMySessions,
-  getSessionById,
-  type TeacherSessionRow,
-  type SessionDetail,
+    getMySessions,
+    getSessionById,
+    type SessionDetail,
+    type TeacherSessionRow,
 } from "@/src/api/sessions";
-import { getApprovedCategories } from "@/src/api/categories";
+import AppLayout from "@/src/components/layout/AppLayout";
+import { AppScreen } from "@/src/components/ui/AppScreen";
 
 const COLORS = {
   bg: "#05070F",
@@ -481,7 +481,7 @@ setDescription((prev) => {
       Alert.alert("Accepted", "Private session created successfully.", [
         {
           text: "OK",
-          onPress: () => router.replace("/(teacher)/sessions"),
+          onPress: () =>  safeReplace("/(teacher)/sessions"),
         },
       ]);
     } catch (e: any) {

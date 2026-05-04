@@ -1,28 +1,32 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   ScrollView,
+  Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-
-import { authStore } from "../../src/store/auth.store";
-import { api } from "../../src/api/client";
+import { deleteAccount } from "@/src/api/auth";
+import { BackHandler } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import { getNearbyTeacherDemand } from "../../src/api/classRequests";
+import { api } from "../../src/api/client";
 import { ExplainCard } from "../../src/components/ui/ExplainCard";
+import { authStore } from "../../src/store/auth.store";
 import {
   hasSeenExplainCard,
   markExplainCardSeen,
 } from "../../src/utils/explainCard";
 
 import AppLayout from "@/src/components/layout/AppLayout";
-import { AppScreen } from "@/src/components/ui/AppScreen";
 import { AppButton } from "@/src/components/ui/AppButton";
+import { AppScreen } from "@/src/components/ui/AppScreen";
 
 const COLORS = {
   bg: "#05070F",
@@ -118,13 +122,10 @@ export default function TeacherDashboard() {
       setLoading(true);
       setDashboardError(null);
 
-      const [stripeRes, demandRes] = await Promise.all([
-        api.get("/teacher/stripe/status"),
-        getNearbyTeacherDemand(),
-      ]);
-
+      const stripeRes = await api.get("/teacher/stripe/status");
       setStripeStatus(stripeRes.data);
 
+      const demandRes = await getNearbyTeacherDemand();
       setDemand({
         existing_categories: Array.isArray(demandRes.existing_categories)
           ? demandRes.existing_categories
@@ -135,6 +136,11 @@ export default function TeacherDashboard() {
       });
     } catch (e: any) {
       console.error(e);
+
+      if (e?.response?.status === 429) {
+        setDashboardError("Too many requests. Please wait a moment, then try again.");
+        return;
+      }
 
       const message =
         e?.response?.data?.message ??
@@ -153,16 +159,48 @@ export default function TeacherDashboard() {
     loadDashboard();
   }, [loadDashboard]);
 
-  useEffect(() => {
-    (async () => {
-      const seen = await hasSeenExplainCard("teacher-dashboard-intro");
-      setShowTeacherExplainCard(!seen);
-    })();
-  }, []);
+  // useEffect(() => {
+  //   (async () => {
+  //     const seen = await hasSeenExplainCard("teacher-dashboard-intro");
+  //     setShowTeacherExplainCard(!seen);
+  //   })();
+  // }, []);
+
+   ////FOR TESTING EXPLAINCARD
+useEffect(() => {
+  setShowTeacherExplainCard(true);
+}, []);
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete your account?",
+      "This will permanently delete:\n\n• Your profile\n• All sessions\n• All bookings\n• All messages and requests\n\nThis action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete permanently",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteAccount();
+
+              await authStore.getState().clearAuthLocalOnly();
+              safeReplace("/(auth)/login");
+            } catch (e) {
+              Alert.alert("Error", "Could not delete account.");
+            }
+          },
+        },
+      ]
+    );
+  };
 
   async function handleLogout() {
     await authStore.getState().logout();
-    router.replace("/(auth)/login");
+    safeReplace("/(auth)/login");
   }
 
   async function handleStripeOnboarding() {
@@ -193,6 +231,17 @@ export default function TeacherDashboard() {
       setOnboardingLoading(false);
     }
   }
+
+  //   useFocusEffect(
+  //   useCallback(() => {
+  //     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+  //       safeReplace("/(learner)/map");
+  //       return true;
+  //     });
+
+  //     return () => sub.remove();
+  //   }, []),
+  // );
 
   const handleDismissTeacherExplainCard = useCallback(async () => {
     await markExplainCardSeen("teacher-dashboard-intro");
@@ -248,16 +297,51 @@ export default function TeacherDashboard() {
           ) : (
             <>
               {showTeacherExplainCard ? (
-                <View style={styles.explainWrap}>
-                  <ExplainCard
-                    title="Simple teaching flow"
-                    body="You create one session with title, price, time, and location. Learners only see bookable sessions."
-                    ctaText="Create session"
-                    onPressCta={() => router.push("/(teacher)/sessions/create")}
-                    dismissText="Got it"
-                    onDismiss={handleDismissTeacherExplainCard}
-                  />
-                </View>
+                <Modal transparent visible animationType="fade">
+                  <View style={styles.explainModalBackdrop}>
+                    <View style={styles.explainModalCard}>
+                      <ExplainCard
+                        title="Simple teaching flow"
+                        body={
+                          <View style={{ gap: 14 }}>
+                            <View style={styles.explainRow}>
+                              <View style={styles.explainIconCircle}>
+                                <Ionicons name="create-outline" size={22} color="#3F6AE0" />
+                              </View>
+
+                              <Text style={styles.explainText}>
+                                Create a session with{" "}
+                                <Text style={styles.explainStrong}>title, price, time</Text>,
+                                and location.
+                              </Text>
+                            </View>
+
+                            <View style={styles.explainDivider} />
+
+                            <View style={styles.explainRow}>
+                              <View style={styles.explainIconCircle}>
+                                <Ionicons name="calendar-outline" size={22} color="#3F6AE0" />
+                              </View>
+
+                              <Text style={styles.explainText}>
+                                Learners only see{" "}
+                                <Text style={styles.explainStrong}>bookable sessions</Text>{" "}
+                                they can reserve in the app.
+                              </Text>
+                            </View>
+                          </View>
+                        }
+                        ctaText="Create session"
+                        onPressCta={() => {
+                          setShowTeacherExplainCard(false);
+                          safePush("/(teacher)/sessions/create");
+                        }}
+                        dismissText="Got it"
+                        onDismiss={handleDismissTeacherExplainCard}
+                      />
+                    </View>
+                  </View>
+                </Modal>
               ) : null}
 
               <DashboardCard icon="card-outline" title="Stripe payouts">
@@ -294,6 +378,25 @@ export default function TeacherDashboard() {
                 ) : null}
               </DashboardCard>
 
+              <DashboardCard icon="calendar-outline" title="Sessions">
+                <Text style={styles.bodyText}>
+                  Create bookable sessions, manage upcoming ones, and duplicate
+                  past ones quickly.
+                </Text>
+
+                <View style={styles.actionStack}>
+                  <AppButton
+                    title="My sessions"
+                    onPress={() => safePush("/(teacher)/sessions")}
+                  />
+                  <AppButton
+                    title="Create session"
+                    onPress={() => safePush("/(teacher)/sessions/create")}
+                    variant="secondary"
+                  />
+                </View>
+              </DashboardCard>
+
               <DashboardCard
                 icon="trending-up-outline"
                 title="Learners near you want"
@@ -311,7 +414,7 @@ export default function TeacherDashboard() {
 
                     <AppButton
                       title="Create session anyway"
-                      onPress={() => router.push("/(teacher)/sessions/create")}
+                      onPress={() => safePush("/(teacher)/sessions/create")}
                     />
                   </>
                 ) : (
@@ -355,7 +458,7 @@ export default function TeacherDashboard() {
                     <View style={styles.actionStack}>
                       <AppButton
                         title="Create session for this demand"
-                        onPress={() => router.push("/(teacher)/sessions/create")}
+                        onPress={() => safePush("/(teacher)/sessions/create")}
                       />
                       <AppButton
                         title="Refresh demand"
@@ -365,37 +468,6 @@ export default function TeacherDashboard() {
                     </View>
                   </>
                 )}
-              </DashboardCard>
-
-              <DashboardCard icon="person-outline" title="Profile">
-                <Text style={styles.bodyText}>
-                  Add your bio, profile image, and teaching identity so learners
-                  can trust and follow you.
-                </Text>
-
-                <AppButton
-                  title="Edit profile"
-                  onPress={() => router.replace("/(teacher)/profile")}
-                />
-              </DashboardCard>
-
-              <DashboardCard icon="calendar-outline" title="Sessions">
-                <Text style={styles.bodyText}>
-                  Create bookable sessions, manage upcoming ones, and duplicate
-                  past ones quickly.
-                </Text>
-
-                <View style={styles.actionStack}>
-                  <AppButton
-                    title="My sessions"
-                    onPress={() => router.replace("/(teacher)/sessions")}
-                  />
-                  <AppButton
-                    title="Create session"
-                    onPress={() => router.push("/(teacher)/sessions/create")}
-                    variant="secondary"
-                  />
-                </View>
               </DashboardCard>
 
               <DashboardCard
@@ -411,9 +483,34 @@ export default function TeacherDashboard() {
                   <AppButton
                     title="View private requests"
                     onPress={() =>
-                      router.push("/(teacher)/private-session-requests")
+                      safePush("/(teacher)/private-session-requests")
                     }
                   />
+                </View>
+              </DashboardCard>
+
+              <DashboardCard icon="person-outline" title="Profile">
+                <Text style={styles.bodyText}>
+                  Add your bio, profile image, and teaching identity so learners
+                  can trust and follow you.
+                </Text>
+
+                <AppButton
+                  title="Edit profile"
+                  onPress={() => safePush("/(teacher)/profile")}
+                />
+              </DashboardCard>
+
+
+              <DashboardCard icon="trash-outline" title="Delete account">
+                <Text style={styles.bodyText}>
+                  Permanently delete your account and all associated data.
+                </Text>
+
+                <View style={{ marginTop: 10 }}>
+                  <Pressable onPress={handleDeleteAccount} style={styles.deleteButton}>
+                    <Text style={styles.deleteButtonText}>Delete account</Text>
+                  </Pressable>
                 </View>
               </DashboardCard>
 
@@ -428,6 +525,11 @@ export default function TeacherDashboard() {
                   variant="secondary"
                 />
               </DashboardCard>
+
+
+
+
+
             </>
           )}
         </ScrollView>
@@ -472,7 +574,21 @@ const styles = StyleSheet.create({
     lineHeight: 34,
     marginBottom: 8,
   },
+  deleteButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: "#8b000086",
+    borderWidth: 1,
+    borderColor: "#FF4D4D",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
+  deleteButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "900",
+  },
   subtitle: {
     color: COLORS.textSoft,
     fontSize: 15,
@@ -624,5 +740,47 @@ const styles = StyleSheet.create({
     color: COLORS.textSoft,
     fontSize: 14,
     marginTop: 10,
+  },
+  explainModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.62)",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+
+  explainModalCard: {
+    width: "100%",
+  },
+
+  explainRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+
+  explainIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(111,146,255,0.13)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  explainText: {
+    flex: 1,
+    color: "#111827",
+    fontSize: 15,
+    lineHeight: 22,
+  },
+
+  explainStrong: {
+    color: "#3F6AE0",
+    fontWeight: "900",
+  },
+
+  explainDivider: {
+    height: 1,
+    backgroundColor: "rgba(0,0,0,0.08)",
   },
 });

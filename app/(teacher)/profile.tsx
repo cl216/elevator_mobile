@@ -1,26 +1,29 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import {
   createTeacherProfile,
   getMyTeacherProfile,
 } from "../../src/api/teacher";
+import { uploadImage } from "../../src/api/uploads";
 import { authStore } from "../../src/store/auth.store";
 
 import AppLayout from "@/src/components/layout/AppLayout";
-import { AppScreen } from "@/src/components/ui/AppScreen";
 import { AppButton } from "@/src/components/ui/AppButton";
+import { AppScreen } from "@/src/components/ui/AppScreen";
 
 const COLORS = {
   bg: "#05070F",
@@ -38,22 +41,19 @@ const COLORS = {
   accentSoft: "rgba(111,146,255,0.12)",
   accentBorder: "rgba(111,146,255,0.25)",
 
-  button: "#3F6AE0",
-  buttonPressed: "#355CC2",
   buttonSecondary: "#121A2C",
-
   divider: "rgba(255,255,255,0.06)",
 };
 
-function DashboardStyleCard({
+function ProfileStyleCard({
   icon,
   title,
-  subtitle,
+  body,
   children,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
-  subtitle?: string;
+  body?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -65,13 +65,7 @@ function DashboardStyleCard({
           </View>
 
           <View style={styles.cardHeaderTextWrap}>
-            <View style={styles.cardHeaderCopy}>
-              <Text style={styles.sectionTitle}>{title}</Text>
-              {subtitle ? (
-                <Text style={styles.sectionSubtitle}>{subtitle}</Text>
-              ) : null}
-            </View>
-
+            <Text style={styles.cardTitle}>{title}</Text>
             <Ionicons
               name="chevron-forward"
               size={18}
@@ -79,6 +73,8 @@ function DashboardStyleCard({
             />
           </View>
         </View>
+
+        {body ? <Text style={styles.cardBody}>{body}</Text> : null}
 
         {children}
       </View>
@@ -88,6 +84,7 @@ function DashboardStyleCard({
 
 export default function TeacherProfileScreen() {
   const hasTeacherProfile = authStore((s) => s.hasTeacherProfile);
+  const currentUser = authStore((s: any) => s.user);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -115,7 +112,7 @@ export default function TeacherProfileScreen() {
 
         if (!alive || !existing) return;
 
-        setFullName(existing.full_name ?? "");
+        setFullName(existing.full_name ?? existing.display_name ?? "");
         setBio(existing.bio ?? "");
         setProfileImageUrl(existing.image_url ?? existing.avatar_url ?? "");
 
@@ -140,14 +137,40 @@ export default function TeacherProfileScreen() {
     };
   }, []);
 
-  async function handleSave() {
-    if (!fullName.trim()) {
-      Alert.alert("Missing name", "Please enter your full name.");
+  useEffect(() => {
+    if (!hasTeacherProfile && !fullName.trim()) {
+      const name =
+        currentUser?.full_name ??
+        currentUser?.display_name ??
+        currentUser?.first_name ??
+        currentUser?.name ??
+        "";
+
+      if (name) setFullName(name);
+    }
+  }, [currentUser, hasTeacherProfile, fullName]);
+
+  async function pickImage(setter: (uri: string) => void) {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Please allow photo access to choose images.");
       return;
     }
 
-    if (!profileImageUrl.trim()) {
-      Alert.alert("Missing profile photo", "Please add a profile image URL.");
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+quality: 0.55,    });
+
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      setter(result.assets[0].uri);
+    }
+  }
+
+  async function handleSave() {
+    if (!fullName.trim()) {
+      Alert.alert("Missing name", "Please enter your full name.");
       return;
     }
 
@@ -155,26 +178,35 @@ export default function TeacherProfileScreen() {
       .map((item) => item.trim())
       .filter(Boolean);
 
-    if (galleryImages.length === 0) {
-      Alert.alert(
-        "Missing gallery images",
-        "Please add at least 1 extra image for your teacher profile.",
-      );
-      return;
-    }
-
     try {
       setSaving(true);
 
-      await createTeacherProfile({
-        full_name: fullName.trim(),
-        bio: bio.trim() || undefined,
-        image_url: profileImageUrl.trim(),
-        gallery_image_urls: galleryImages,
-        image_url_1: imageUrl1.trim() || undefined,
-        image_url_2: imageUrl2.trim() || undefined,
-        image_url_3: imageUrl3.trim() || undefined,
-      } as any);
+      const uploadedProfileImageUrl = profileImageUrl.trim()
+        ? profileImageUrl.startsWith("file:")
+          ? await uploadImage(profileImageUrl)
+          : profileImageUrl.trim()
+        : undefined;
+
+const uploadedGalleryImages: string[] = [];
+
+for (const image of galleryImages) {
+  if (image.startsWith("file:")) {
+    const uploadedUrl = await uploadImage(image);
+    uploadedGalleryImages.push(uploadedUrl);
+  } else {
+    uploadedGalleryImages.push(image);
+  }
+}
+
+await createTeacherProfile({
+  full_name: fullName.trim(),
+  bio: bio.trim() || undefined,
+  image_url: uploadedProfileImageUrl,
+  gallery_image_urls: uploadedGalleryImages,
+  image_url_1: uploadedGalleryImages[0],
+  image_url_2: uploadedGalleryImages[1],
+  image_url_3: uploadedGalleryImages[2],
+} as any);
 
       await authStore.getState().setHasTeacherProfile(true);
 
@@ -184,7 +216,7 @@ export default function TeacherProfileScreen() {
         [
           {
             text: "OK",
-            onPress: () => router.replace("/(teacher)/dashboard"),
+            onPress: () =>  safeReplace("/(teacher)/dashboard"),
           },
         ],
       );
@@ -213,7 +245,7 @@ export default function TeacherProfileScreen() {
     <AppLayout>
       <AppScreen>
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={styles.screen}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.hero}>
@@ -222,9 +254,7 @@ export default function TeacherProfileScreen() {
             </View>
 
             <Text style={styles.title}>
-              {hasTeacherProfile
-                ? "Edit profile"
-                : "Create your teacher profile"}
+              {hasTeacherProfile ? "Edit profile" : "Create your teacher profile"}
             </Text>
 
             <Text style={styles.subtitle}>
@@ -233,18 +263,18 @@ export default function TeacherProfileScreen() {
           </View>
 
           {loading ? (
-            <DashboardStyleCard icon="person-outline" title="Profile">
+            <ProfileStyleCard icon="person-outline" title="Profile">
               <View style={styles.loadingWrap}>
                 <ActivityIndicator color={COLORS.accent} />
                 <Text style={styles.loadingText}>Loading profile…</Text>
               </View>
-            </DashboardStyleCard>
+            </ProfileStyleCard>
           ) : (
             <>
-              <DashboardStyleCard
+              <ProfileStyleCard
                 icon="create-outline"
                 title="Teacher details"
-                subtitle="Add the essentials learners use to trust and book you."
+                body="Add the essentials learners use to trust and book you."
               >
                 <View style={styles.fieldBlock}>
                   <Text style={styles.label}>Full name</Text>
@@ -282,25 +312,22 @@ export default function TeacherProfileScreen() {
                     payment requests are not allowed.
                   </Text>
                 </View>
-              </DashboardStyleCard>
+              </ProfileStyleCard>
 
-              <DashboardStyleCard
+              <ProfileStyleCard
                 icon="image-outline"
                 title="Profile photo"
-                subtitle="This is the main image learners will associate with you."
+                body="Optional for now. This is the main image learners associate with you."
               >
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Main profile image URL</Text>
-                  <TextInput
-                    value={profileImageUrl}
-                    onChangeText={setProfileImageUrl}
-                    placeholder="https://example.com/profile-photo.jpg"
-                    placeholderTextColor={COLORS.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={styles.input}
-                  />
-                </View>
+                <Pressable
+                  onPress={() => pickImage(setProfileImageUrl)}
+                  style={styles.ctaButton}
+                >
+                  <Ionicons name="image-outline" size={18} color={COLORS.text} />
+                  <Text style={styles.ctaButtonText}>
+                    {profileImageUrl ? "Change profile photo" : "Choose profile photo"}
+                  </Text>
+                </Pressable>
 
                 {profileImageUrl.trim() ? (
                   <View style={styles.profilePreviewWrap}>
@@ -311,57 +338,39 @@ export default function TeacherProfileScreen() {
                     />
                   </View>
                 ) : null}
-              </DashboardStyleCard>
+              </ProfileStyleCard>
 
-              <DashboardStyleCard
+              <ProfileStyleCard
                 icon="images-outline"
                 title="Gallery images"
-                subtitle="Add 1 to 3 extra images to make your teacher view feel richer."
+                body="Optional for now. Add up to 3 extra images to make your teacher view feel richer."
               >
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Gallery image 1</Text>
-                  <TextInput
-                    value={imageUrl1}
-                    onChangeText={setImageUrl1}
-                    placeholder="https://example.com/teaching-photo-1.jpg"
-                    placeholderTextColor={COLORS.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={styles.input}
-                  />
-                </View>
+                <View style={styles.galleryPickerStack}>
+                  {[setImageUrl1, setImageUrl2, setImageUrl3].map((setter, index) => {
+                    const value = [imageUrl1, imageUrl2, imageUrl3][index];
 
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Gallery image 2</Text>
-                  <TextInput
-                    value={imageUrl2}
-                    onChangeText={setImageUrl2}
-                    placeholder="https://example.com/teaching-photo-2.jpg"
-                    placeholderTextColor={COLORS.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={styles.input}
-                  />
+                    return (
+                      <Pressable
+                        key={index}
+                        onPress={() => pickImage(setter)}
+                        style={styles.ctaButton}
+                      >
+                        <Ionicons name="images-outline" size={18} color={COLORS.text} />
+                        <Text style={styles.ctaButtonText}>
+                          {value
+                            ? `Change gallery image ${index + 1}`
+                            : `Choose gallery image ${index + 1}`}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
+              </ProfileStyleCard>
 
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Gallery image 3</Text>
-                  <TextInput
-                    value={imageUrl3}
-                    onChangeText={setImageUrl3}
-                    placeholder="https://example.com/teaching-photo-3.jpg"
-                    placeholderTextColor={COLORS.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={styles.input}
-                  />
-                </View>
-              </DashboardStyleCard>
-
-              <DashboardStyleCard
+              <ProfileStyleCard
                 icon="eye-outline"
                 title="Teacher view preview"
-                subtitle="A quick preview of how your profile may feel to learners."
+                body="A quick preview of how your profile may feel to learners."
               >
                 <View style={styles.previewGallery}>
                   {[0, 1, 2].map((index) => {
@@ -396,7 +405,13 @@ export default function TeacherProfileScreen() {
                         resizeMode="cover"
                       />
                     ) : (
-                      <View style={styles.previewAvatarFallback} />
+                      <View style={styles.previewAvatarFallback}>
+                        <Ionicons
+                          name="person-outline"
+                          size={24}
+                          color={COLORS.textMuted}
+                        />
+                      </View>
                     )}
 
                     <View style={styles.previewTextWrap}>
@@ -409,33 +424,29 @@ export default function TeacherProfileScreen() {
                     </View>
                   </View>
                 </View>
-              </DashboardStyleCard>
+              </ProfileStyleCard>
 
               <View style={styles.actionStack}>
-<AppButton
-  title={
-    saving
-      ? "Saving..."
-      : hasTeacherProfile
-        ? "Save profile"
-        : "Create profile"
-  }
-  onPress={() => {
-    if (!saving) {
-      handleSave();
-    }
-  }}
-/>
+                <AppButton
+                  title={
+                    saving
+                      ? "Saving..."
+                      : hasTeacherProfile
+                        ? "Save profile"
+                        : "Create profile"
+                  }
+                  onPress={() => {
+                    if (!saving) handleSave();
+                  }}
+                />
 
-<AppButton
-  title="Cancel"
-  onPress={() => {
-    if (!saving) {
-      router.back();
-    }
-  }}
-  variant="secondary"
-/>
+                <AppButton
+                  title="Cancel"
+                  onPress={() => {
+                    if (!saving) router.back();
+                  }}
+                  variant="secondary"
+                />
               </View>
             </>
           )}
@@ -446,11 +457,12 @@ export default function TeacherProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: {
-  paddingHorizontal: 20,
-  paddingTop: 24,
-  paddingBottom: 40,
-  flexGrow: 1,  },
+  screen: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
+    flexGrow: 1,
+  },
 
   hero: {
     marginBottom: 18,
@@ -506,7 +518,7 @@ const styles = StyleSheet.create({
 
   cardHeaderRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     marginBottom: 12,
   },
 
@@ -525,26 +537,23 @@ const styles = StyleSheet.create({
   cardHeaderTextWrap: {
     flex: 1,
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
   },
 
-  cardHeaderCopy: {
-    flex: 1,
-  },
-
-  sectionTitle: {
+  cardTitle: {
     color: COLORS.text,
     fontSize: 18,
     fontWeight: "800",
-    marginBottom: 4,
+    flex: 1,
   },
 
-  sectionSubtitle: {
+  cardBody: {
     color: COLORS.textSoft,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 14,
   },
 
   fieldBlock: {
@@ -600,8 +609,32 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
+  ctaButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: "rgba(111,146,255,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(111,146,255,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+
+  ctaButtonText: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
+  galleryPickerStack: {
+    gap: 10,
+  },
+
   profilePreviewWrap: {
-    marginTop: 4,
+    marginTop: 14,
     alignItems: "flex-start",
   },
 
@@ -681,6 +714,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surfaceSoft,
     borderWidth: 1,
     borderColor: COLORS.borderStrong,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   previewName: {

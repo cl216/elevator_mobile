@@ -1,13 +1,13 @@
-import "react-native-gesture-handler";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
+import * as Notifications from "expo-notifications";
 import { Stack, useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import { AppState, AppStateStatus } from "react-native";
+import "react-native-gesture-handler";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
-import * as Notifications from "expo-notifications";
-
-import { authStore } from "../src/store/auth.store";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import { AppToast } from "../src/components/ui/AppToast";
+import { authStore } from "../src/store/auth.store";
 import { registerPushToken } from "../src/utils/registerPushToken";
 
 Notifications.setNotificationHandler({
@@ -82,7 +82,7 @@ export default function RootLayout() {
         const refreshedToken = await state.refreshAccessToken();
 
         if (!refreshedToken) {
-          router.replace("/(auth)/login");
+           safeReplace("/(auth)/login");
           return;
         }
 
@@ -90,7 +90,7 @@ export default function RootLayout() {
       } catch (error) {
         console.error("Session refresh on resume failed:", error);
         await authStore.getState().logout();
-        router.replace("/(auth)/login");
+         safeReplace("/(auth)/login");
       }
     };
 
@@ -127,55 +127,55 @@ export default function RootLayout() {
         type === "session_reminder_1h"
       ) {
         if (bookingId) {
-          router.push({
+           safePush({
             pathname: "/(learner)/booking/[id]",
             params: { id: String(bookingId) },
           });
           return;
         }
 
-        router.push("/(learner)/bookings");
+         safeReplace("/(learner)/bookings");
         return;
       }
 
       if (type === "review_reminder") {
         if (bookingId) {
-          router.push({
+           safePush({
             pathname: "/(learner)/review/[bookingId]",
             params: { bookingId: String(bookingId) },
           });
           return;
         }
 
-        router.push("/(learner)/bookings");
+         safeReplace("/(learner)/bookings");
         return;
       }
 
       if (type === "private_session_request_declined") {
-        router.push("/(learner)/notifications");
+         safeReplace("/(learner)/notifications");
         return;
       }
 
       if (type === "private_session_request_accepted") {
         if (sessionId) {
-          router.push({
-            pathname: "/(learner)/session/[id]",
+           safePush({
+            pathname: "/(modal)/session/[id]",
             params: { id: String(sessionId) },
           });
           return;
         }
 
         if (privateSessionRequestId) {
-          router.push("/(learner)/notifications");
+           safeReplace("/(learner)/notifications");
           return;
         }
 
-        router.push("/(learner)/notifications");
+         safeReplace("/(learner)/notifications");
         return;
       }
 
       if (type === "private_session_request_created") {
-        router.push("/(teacher)/private-session-requests");
+         safePush("/(teacher)/private-session-requests");
         return;
       }
 
@@ -187,18 +187,18 @@ export default function RootLayout() {
         type === "teacher_session_reminder_1h"
       ) {
         if (sessionId) {
-          router.push({
+           safePush({
             pathname: "/(teacher)/sessions/[id]",
             params: { id: String(sessionId) },
           });
           return;
         }
 
-        router.push("/(teacher)/sessions");
+         safeReplace("/(teacher)/sessions");
         return;
       }
 
-      router.push("/(learner)/notifications");
+       safeReplace("/(learner)/notifications");
     };
 
     const receivedSub = Notifications.addNotificationReceivedListener(
@@ -230,18 +230,21 @@ export default function RootLayout() {
   }, [router]);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <BottomSheetModalProvider>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            animation: "slide_from_right",
-            gestureEnabled: true,
-          }}
-        />
+  <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#000000" }}>
+    <BottomSheetModalProvider>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: "slide_from_right",
+          gestureEnabled: true,
+          contentStyle: {
+            backgroundColor: "#000000",
+          },
+        }}
+      />
 
-        <AppToast />
-      </BottomSheetModalProvider>
-    </GestureHandlerRootView>
-  );
+      <AppToast />
+    </BottomSheetModalProvider>
+  </GestureHandlerRootView>
+);
 }

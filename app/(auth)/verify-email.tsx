@@ -1,7 +1,12 @@
-import { useLocalSearchParams, router } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable, Alert } from "react-native";
+import { Alert, Pressable, Text, TextInput } from "react-native";
 import { api } from "../../src/api/client";
+import { safeReplace } from "@/src/utils/safeRouter";
+import AuthScreenShell, {
+  AUTH_COLORS as COLORS,
+} from "@/src/components/auth/AuthScreenShell";
+import { authStyles as styles } from "@/src/components/auth/authStyles";
 
 export default function VerifyEmailScreen() {
   const params = useLocalSearchParams<{ token?: string; email?: string }>();
@@ -31,9 +36,9 @@ export default function VerifyEmailScreen() {
           [
             {
               text: "Go to login",
-              onPress: () => router.replace("/(auth)/login"),
+              onPress: () => safeReplace("/(auth)/login"),
             },
-          ]
+          ],
         );
       } catch (e: any) {
         if (!active) return;
@@ -61,7 +66,7 @@ export default function VerifyEmailScreen() {
       setLoading(true);
 
       const res = await api.post("/auth/send-verification", {
-        email,
+        email: email.trim().toLowerCase(),
       });
 
       const message =
@@ -71,7 +76,7 @@ export default function VerifyEmailScreen() {
       Alert.alert("Check your email", message, [
         {
           text: "Back to login",
-          onPress: () => router.replace("/(auth)/login"),
+          onPress: () => safeReplace("/(auth)/login"),
         },
       ]);
     } catch (e: any) {
@@ -88,25 +93,20 @@ export default function VerifyEmailScreen() {
 
   if (verifyingToken) {
     return (
-      <View style={{ flex: 1, padding: 20, justifyContent: "center", gap: 12 }}>
-        <Text style={{ fontSize: 28, fontWeight: "700" }}>
-          Verifying email
-        </Text>
-
-        <Text style={{ opacity: 0.7 }}>
+      <AuthScreenShell>
+        <Text style={styles.title}>Verifying email</Text>
+        <Text style={styles.subtitle}>
           Please wait while we verify your email.
         </Text>
-      </View>
+      </AuthScreenShell>
     );
   }
 
   return (
-    <View style={{ flex: 1, padding: 20, justifyContent: "center", gap: 12 }}>
-      <Text style={{ fontSize: 28, fontWeight: "700" }}>
-        Verify your email
-      </Text>
+    <AuthScreenShell>
+      <Text style={styles.title}>Verify your email</Text>
 
-      <Text style={{ opacity: 0.7 }}>
+      <Text style={styles.subtitle}>
         Enter your email and we&apos;ll resend your verification link.
       </Text>
 
@@ -116,28 +116,23 @@ export default function VerifyEmailScreen() {
         autoCapitalize="none"
         keyboardType="email-address"
         placeholder="Email"
-        style={{ borderWidth: 1, padding: 12, borderRadius: 10 }}
+        placeholderTextColor={COLORS.textMuted}
+        style={styles.input}
       />
 
       <Pressable
         onPress={handleResendVerification}
         disabled={loading}
-        style={{
-          backgroundColor: "black",
-          padding: 14,
-          borderRadius: 10,
-          alignItems: "center",
-          opacity: loading ? 0.6 : 1,
-        }}
+        style={[styles.button, loading && styles.buttonDisabled]}
       >
-        <Text style={{ color: "white", fontWeight: "600" }}>
+        <Text style={styles.buttonText}>
           {loading ? "Sending..." : "Resend verification email"}
         </Text>
       </Pressable>
 
-      <Pressable onPress={() => router.replace("/(auth)/login")}>
-        <Text style={{ textAlign: "center" }}>Back to login</Text>
+      <Pressable onPress={() => safeReplace("/(auth)/login")}>
+        <Text style={styles.link}>Back to login</Text>
       </Pressable>
-    </View>
+    </AuthScreenShell>
   );
 }

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
 import { router } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -9,8 +9,10 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { createClass } from "../../../src/api/classes";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
+
 import { getApprovedCategories } from "../../../src/api/categories";
+import { createClass } from "../../../src/api/classes";
 import { uiToastStore } from "../../../src/store/uiToast.store";
 
 type ApprovedCategory = {
@@ -67,7 +69,7 @@ export default function CreateClassScreen() {
   }, []);
 
   function handleProposeCategory() {
-    router.push("/(modal)/propose-category");
+    safePush("/(modal)/propose-category");
   }
 
   async function handleSave() {
@@ -102,7 +104,7 @@ export default function CreateClassScreen() {
       });
 
       uiToastStore.getState().showToast("Class created");
-      router.replace("/(teacher)/classes");
+      safeReplace("/(teacher)/classes");
     } catch (e: any) {
       console.error(e);
 
@@ -135,11 +137,11 @@ export default function CreateClassScreen() {
           Create class
         </Text>
         <Text style={{ marginTop: 6, opacity: 0.7 }}>
-          Create a reusable class template like Watercolour Basics or Intro to
-          Guitar.
+          Create a reusable class template like Watercolour Basics or Intro to Guitar.
         </Text>
       </View>
 
+      {/* TITLE */}
       <View style={{ marginBottom: 16 }}>
         <Text style={{ fontWeight: "800", marginBottom: 8 }}>Title</Text>
         <TextInput
@@ -156,6 +158,7 @@ export default function CreateClassScreen() {
         />
       </View>
 
+      {/* CATEGORY */}
       <View style={{ marginBottom: 16 }}>
         <Text style={{ fontWeight: "800", marginBottom: 8 }}>Category</Text>
 
@@ -174,34 +177,6 @@ export default function CreateClassScreen() {
             <Text style={{ marginTop: 8, opacity: 0.7 }}>
               Loading categories…
             </Text>
-          </View>
-        ) : categories.length === 0 ? (
-          <View
-            style={{
-              borderWidth: 1,
-              borderColor: "rgba(0,0,0,0.12)",
-              borderRadius: 12,
-              padding: 14,
-              backgroundColor: "#fafafa",
-            }}
-          >
-            <Text style={{ marginBottom: 12 }}>
-              No approved categories are available yet.
-            </Text>
-
-            <Pressable
-              onPress={loadCategories}
-              style={{
-                backgroundColor: "black",
-                paddingVertical: 12,
-                borderRadius: 12,
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ color: "white", fontWeight: "800" }}>
-                Try again
-              </Text>
-            </Pressable>
           </View>
         ) : (
           <>
@@ -235,6 +210,7 @@ export default function CreateClassScreen() {
               })}
             </View>
 
+            {/* ALWAYS SHOW THIS */}
             <Pressable
               onPress={handleProposeCategory}
               style={{
@@ -248,18 +224,18 @@ export default function CreateClassScreen() {
               }}
             >
               <Text style={{ fontWeight: "800" }}>
-                Propose new category
+                Suggest new category
               </Text>
             </Pressable>
 
             <Text style={{ marginTop: 8, opacity: 0.65 }}>
-              New categories are reviewed before they can be used in classes and
-              filters.
+              Suggestions are reviewed before being added to the platform.
             </Text>
           </>
         )}
       </View>
 
+      {/* DESCRIPTION */}
       <View style={{ marginBottom: 16 }}>
         <Text style={{ fontWeight: "800", marginBottom: 8 }}>Description</Text>
         <TextInput
@@ -279,70 +255,7 @@ export default function CreateClassScreen() {
         />
       </View>
 
-      <View style={{ marginBottom: 16 }}>
-        <Text style={{ fontWeight: "800", marginBottom: 8 }}>
-          Image 1 URL
-        </Text>
-        <TextInput
-          value={imageUrl1}
-          onChangeText={setImageUrl1}
-          placeholder="https://example.com/class-photo-1.jpg"
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={{
-            borderWidth: 1,
-            borderColor: "rgba(0,0,0,0.12)",
-            borderRadius: 12,
-            padding: 12,
-            backgroundColor: "#fafafa",
-          }}
-        />
-      </View>
-
-      <View style={{ marginBottom: 16 }}>
-        <Text style={{ fontWeight: "800", marginBottom: 8 }}>
-          Image 2 URL
-        </Text>
-        <TextInput
-          value={imageUrl2}
-          onChangeText={setImageUrl2}
-          placeholder="https://example.com/class-photo-2.jpg"
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={{
-            borderWidth: 1,
-            borderColor: "rgba(0,0,0,0.12)",
-            borderRadius: 12,
-            padding: 12,
-            backgroundColor: "#fafafa",
-          }}
-        />
-      </View>
-
-      <View style={{ marginBottom: 24 }}>
-        <Text style={{ fontWeight: "800", marginBottom: 8 }}>
-          Image 3 URL
-        </Text>
-        <TextInput
-          value={imageUrl3}
-          onChangeText={setImageUrl3}
-          placeholder="https://example.com/class-photo-3.jpg"
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={{
-            borderWidth: 1,
-            borderColor: "rgba(0,0,0,0.12)",
-            borderRadius: 12,
-            padding: 12,
-            backgroundColor: "#fafafa",
-          }}
-        />
-
-        <Text style={{ marginTop: 8, opacity: 0.65 }}>
-          Add up to 3 image URLs for the class gallery shown to learners.
-        </Text>
-      </View>
-
+      {/* PRICE */}
       <View style={{ marginBottom: 24 }}>
         <Text style={{ fontWeight: "800", marginBottom: 8 }}>Price (€)</Text>
         <TextInput
@@ -360,14 +273,13 @@ export default function CreateClassScreen() {
         />
       </View>
 
+      {/* SAVE */}
       <Pressable
         onPress={handleSave}
-        disabled={saving || loadingCategories || categories.length === 0}
+        disabled={saving || loadingCategories}
         style={{
           backgroundColor:
-            saving || loadingCategories || categories.length === 0
-              ? "#666"
-              : "black",
+            saving || loadingCategories ? "#666" : "black",
           paddingVertical: 14,
           borderRadius: 14,
           alignItems: "center",
@@ -383,6 +295,7 @@ export default function CreateClassScreen() {
         )}
       </Pressable>
 
+      {/* CANCEL */}
       <Pressable
         onPress={() => router.back()}
         disabled={saving}

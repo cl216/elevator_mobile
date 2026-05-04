@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
-import { api } from "../api/client";
+import { api, markApiLogoutFinished } from "../api/client";
 
 const TOKEN_KEY = "auth_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
@@ -12,7 +12,9 @@ type AuthState = {
   hasTeacherProfile: boolean;
   hydrated: boolean;
   isRefreshingToken: boolean;
+  isLoggingOut: boolean;
 
+  clearAuthLocalOnly: () => Promise<void>;
   hydrate: () => Promise<void>;
   setAuth: (
     token: string,
@@ -24,10 +26,15 @@ type AuthState = {
   refreshAccessToken: () => Promise<string | null>;
   logout: () => Promise<void>;
 };
-
 let refreshPromise: Promise<string | null> | null = null;
 let refreshMePromise: Promise<void> | null = null;
 let lastRefreshMeAt = 0;
+
+async function clearStoredAuth() {
+  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+  await SecureStore.deleteItemAsync(HAS_TEACHER_PROFILE_KEY);
+}
 
 export const authStore = create<AuthState>((set, get) => ({
   token: null,
@@ -35,6 +42,7 @@ export const authStore = create<AuthState>((set, get) => ({
   hasTeacherProfile: false,
   hydrated: false,
   isRefreshingToken: false,
+  isLoggingOut: false,
 
   hydrate: async () => {
     const token = await SecureStore.getItemAsync(TOKEN_KEY);
@@ -59,7 +67,14 @@ export const authStore = create<AuthState>((set, get) => ({
       hasTeacherProfile ? "true" : "false",
     );
 
-    set({ token, refreshToken, hasTeacherProfile });
+    set({
+      token,
+      refreshToken,
+      hasTeacherProfile,
+      isLoggingOut: false,
+    });
+
+    markApiLogoutFinished();
   },
 
   setHasTeacherProfile: async (hasTeacherProfile) => {
@@ -73,17 +88,12 @@ export const authStore = create<AuthState>((set, get) => ({
 
   refreshMe: async () => {
     const token = get().token;
-    if (!token) return;
+    if (!token || get().isLoggingOut) return;
 
     const now = Date.now();
 
-    if (refreshMePromise) {
-      return refreshMePromise;
-    }
-
-    if (now - lastRefreshMeAt < 30_000) {
-      return;
-    }
+    if (refreshMePromise) return refreshMePromise;
+    if (now - lastRefreshMeAt < 30_000) return;
 
     lastRefreshMeAt = now;
 
@@ -99,9 +109,7 @@ export const authStore = create<AuthState>((set, get) => ({
 
         set({ hasTeacherProfile });
       } catch (e: any) {
-        const status = e?.response?.status;
-
-        if (status === 429) {
+        if (e?.response?.status === 429) {
           console.warn("refreshMe rate-limited, skipping");
           return;
         }
@@ -118,13 +126,9 @@ export const authStore = create<AuthState>((set, get) => ({
   refreshAccessToken: async () => {
     const state = get();
 
-    if (refreshPromise) {
-      return refreshPromise;
-    }
-
-    if (!state.refreshToken) {
-      return null;
-    }
+    if (state.isLoggingOut) return null;
+    if (refreshPromise) return refreshPromise;
+    if (!state.refreshToken) return null;
 
     refreshPromise = (async () => {
       set({ isRefreshingToken: true });
@@ -157,15 +161,24 @@ export const authStore = create<AuthState>((set, get) => ({
 
         return nextAccessToken;
       } catch (e: any) {
-        const status = e?.response?.status;
-
-        if (status === 429) {
+        if (e?.response?.status === 429) {
           console.warn("refreshAccessToken rate-limited, keeping current token");
           return get().token;
         }
 
         console.error("refreshAccessToken failed", e);
-        await get().logout();
+
+        await clearStoredAuth();
+
+        set({
+          token: null,
+          refreshToken: null,
+          hasTeacherProfile: false,
+          isLoggingOut: false,
+        });
+
+        markApiLogoutFinished();
+
         return null;
       } finally {
         set({ isRefreshingToken: false });
@@ -176,25 +189,55 @@ export const authStore = create<AuthState>((set, get) => ({
     return refreshPromise;
   },
 
-  logout: async () => {
-    const token = get().token;
+  clearAuthLocalOnly: async () => {
+    refreshPromise = null;
+    refreshMePromise = null;
 
-    try {
-      if (token) {
-        await api.post("/auth/logout");
-      }
-    } catch (e) {
-      console.log("logout request failed", e);
-    }
-
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
-    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
-    await SecureStore.deleteItemAsync(HAS_TEACHER_PROFILE_KEY);
+    await clearStoredAuth();
 
     set({
       token: null,
       refreshToken: null,
       hasTeacherProfile: false,
+      isRefreshingToken: false,
+      isLoggingOut: false,
     });
+
+    markApiLogoutFinished();
+  },
+
+  logout: async () => {
+    const token = get().token;
+
+    set({
+      token: null,
+      refreshToken: null,
+      hasTeacherProfile: false,
+      isLoggingOut: true,
+    });
+
+    await clearStoredAuth();
+
+    try {
+      if (token) {
+        await api.post(
+          "/auth/logout",
+          {},
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+      }
+    } catch (e) {
+      console.log("logout request failed", e);
+    } finally {
+      refreshPromise = null;
+      refreshMePromise = null;
+
+      set({ isLoggingOut: false });
+      markApiLogoutFinished();
+    }
   },
 }));

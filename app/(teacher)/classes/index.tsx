@@ -1,15 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { router } from "expo-router";
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    Text,
+    View,
 } from "react-native";
 import { getMyClasses } from "../../../src/api/classes";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 
 type TeacherClass = {
   id: string;
@@ -79,7 +79,7 @@ export default function TeacherClassesScreen() {
         </Text>
 
         <Pressable
-          onPress={() => router.push("/(teacher)/classes/create")}
+          onPress={() => safePush("/(teacher)/classes/create")}
           style={{
             backgroundColor: "black",
             paddingVertical: 12,
@@ -129,7 +129,7 @@ export default function TeacherClassesScreen() {
         </View>
 
         <Pressable
-          onPress={() => router.push("/(teacher)/classes/create")}
+          onPress={() => safePush("/(teacher)/classes/create")}
           style={{
             backgroundColor: "black",
             paddingVertical: 10,
@@ -201,7 +201,7 @@ export default function TeacherClassesScreen() {
                   }}
                 >
                   <Pressable
-                    onPress={() => router.push(`/(teacher)/classes/${item.id}/edit`)}
+                    onPress={() => safePush(`/(teacher)/classes/${item.id}/edit`)}
                     style={{
                       flex: 1,
                       backgroundColor: "#111",
@@ -216,7 +216,7 @@ export default function TeacherClassesScreen() {
                   </Pressable>
 
                   <Pressable
-                    onPress={() => router.push("/(teacher)/sessions/create")}
+                    onPress={() => safePush("/(teacher)/sessions/create")}
                     style={{
                       flex: 1,
                       borderWidth: 1,

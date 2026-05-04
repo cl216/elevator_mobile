@@ -1,15 +1,16 @@
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { useLocalSearchParams, router } from "expo-router";
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    ScrollView,
+    Text,
+    View,
 } from "react-native";
 import { api } from "../../../src/api/client";
 import { getSessionBookings } from "../../../src/api/sessions";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 
 type SessionBookingRow = {
   id: string;
@@ -255,7 +256,7 @@ export default function TeacherSessionDetailScreen() {
 
         <View style={{ flexDirection: "row", gap: 10 }}>
           <Pressable
-            onPress={() => router.push(`/(teacher)/sessions/${id}/edit`)}
+            onPress={() => safePush(`/(teacher)/sessions/${id}/edit`)}
             style={{
               borderWidth: 1,
               borderColor: "rgba(0,0,0,0.12)",
@@ -338,7 +339,7 @@ export default function TeacherSessionDetailScreen() {
             </Text>
 
             <Pressable
-              onPress={() => router.push(`/(teacher)/sessions/${id}/edit`)}
+              onPress={() => safePush(`/(teacher)/sessions/${id}/edit`)}
               style={{
                 marginTop: 14,
                 alignSelf: "flex-start",

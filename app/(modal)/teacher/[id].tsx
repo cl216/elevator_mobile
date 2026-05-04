@@ -1,24 +1,25 @@
-import { useLocalSearchParams, router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
+import { safePush } from "@/src/utils/safeRouter";
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Pressable,
+    ScrollView,
+    Text,
+    View,
 } from "react-native";
 import {
-  followTeacher,
-  getFollowStatus,
-  getTeacherProfile,
-  unfollowTeacher,
-} from "../../../src/api/teacher";
-import {
-  getTeacherReviews,
-  type TeacherReview,
+    getTeacherReviews,
+    type TeacherReview,
 } from "../../../src/api/reviews";
+import {
+    followTeacher,
+    getFollowStatus,
+    getTeacherProfile,
+    unfollowTeacher,
+} from "../../../src/api/teacher";
 
 type TeacherProfile = {
   id: string;
@@ -303,7 +304,7 @@ export default function TeacherProfileModal() {
 
   <Pressable
     onPress={() =>
-      router.push({
+       safePush({
         pathname: "/(modal)/private-session-request/[teacherId]",
         params: {
           teacherId: profile.id,

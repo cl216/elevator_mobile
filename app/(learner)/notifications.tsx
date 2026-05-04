@@ -1,5 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import React, { useEffect, useMemo, useState } from "react";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import {
   ActivityIndicator,
   Pressable,
@@ -9,7 +11,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 
 import AppLayout from "@/src/components/layout/AppLayout";
 import { AppScreen } from "@/src/components/ui/AppScreen";
@@ -184,11 +185,11 @@ export default function NotificationsScreen() {
 
     if (type === "review_reminder") {
       if (bookingId) {
-        router.push(`/(learner)/review/${bookingId}`);
+         safePush(`/(learner)/review/${bookingId}`);
         return;
       }
 
-      router.push("/(learner)/bookings");
+       safeReplace("/(learner)/bookings");
       return;
     }
 
@@ -200,11 +201,11 @@ export default function NotificationsScreen() {
       type === "session_reminder_1h"
     ) {
       if (bookingId) {
-        router.push(`/(learner)/booking/${bookingId}`);
+         safePush(`/(learner)/booking/${bookingId}`);
         return;
       }
 
-      router.push("/(learner)/bookings");
+       safeReplace("/(learner)/bookings");
       return;
     }
 
@@ -214,7 +215,7 @@ export default function NotificationsScreen() {
 
     if (type === "private_session_request_accepted") {
       if (sessionId) {
-        router.push(`/(learner)/session/${sessionId}`);
+         safePush(`/(modal)/session/${sessionId}`);
         return;
       }
 
@@ -229,16 +230,16 @@ export default function NotificationsScreen() {
       type === "teacher_session_reminder_1h"
     ) {
       if (sessionId) {
-        router.push(`/(teacher)/sessions/${sessionId}`);
+         safeReplace(`/(teacher)/sessions/${sessionId}`);
         return;
       }
 
-      router.push("/(teacher)/sessions");
+       safeReplace("/(teacher)/sessions");
       return;
     }
 
     if (sessionId) {
-      router.push(`/(modal)/session/${sessionId}`);
+       safePush(`/(modal)/session/${sessionId}`);
     }
   }
 
@@ -248,7 +249,7 @@ export default function NotificationsScreen() {
     const sessionId = item.payload?.session_id;
 
     if (sessionId) {
-      router.push({
+       safePush({
         pathname: "/(learner)/map",
         params: {
           focusSessionId: String(sessionId),

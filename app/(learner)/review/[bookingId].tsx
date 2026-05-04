@@ -1,18 +1,19 @@
-import React, { useEffect, useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    ScrollView,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import {
-  createReview,
-  getReviewEligibility,
+    createReview,
+    getReviewEligibility,
 } from "../../../src/api/reviews";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 
 function getReasonMessage(reason?: string | null) {
   switch (reason) {
@@ -142,7 +143,7 @@ export default function LeaveReviewScreen() {
       Alert.alert("Review submitted", "Thanks for sharing your feedback.", [
         {
           text: "OK",
-          onPress: () => router.replace("/(learner)/bookings"),
+          onPress: () =>  safeReplace("/(learner)/bookings"),
         },
       ]);
     } catch (e: any) {

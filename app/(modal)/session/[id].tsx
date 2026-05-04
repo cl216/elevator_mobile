@@ -1,19 +1,21 @@
-import { useLocalSearchParams, router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   ScrollView,
   Text,
   View,
 } from "react-native";
-import { API_BASE_URL } from "../../../src/config/api";
+import { safePush } from "@/src/utils/safeRouter";
 import {
   followTeacher,
-  unfollowTeacher,
   getFollowStatus,
+  unfollowTeacher,
 } from "../../../src/api/teacher";
+import { API_BASE_URL } from "../../../src/config/api";
 
 type SessionDetail = {
   id: string;
@@ -24,6 +26,7 @@ type SessionDetail = {
   bookings_count?: number;
   spots_left?: number;
   attendee_first_names?: string[];
+  image_urls?: string[];
   class?: { title?: string; description?: string; category?: string };
   teacher?: { id: string; name?: string; avatarUrl?: string };
 };
@@ -44,8 +47,6 @@ export default function SessionPanel() {
   const [followLoading, setFollowLoading] = useState(false);
   const [reserveLoading, setReserveLoading] = useState(false);
 
-  const panelLeftMargin = "0%";
-
   useEffect(() => {
     let alive = true;
 
@@ -60,6 +61,7 @@ export default function SessionPanel() {
         const data = (await res.json()) as SessionDetail;
 
         if (!alive) return;
+
         setSession(data);
 
         if (data?.teacher?.id) {
@@ -108,10 +110,14 @@ export default function SessionPanel() {
   const start = session?.start_time
     ? new Date(session.start_time).toLocaleString()
     : "";
+
   const price = session?.price ?? 0;
   const spotsLeft = session?.spots_left ?? null;
   const bookingsCount = session?.bookings_count ?? 0;
   const attendeeFirstNames = session?.attendee_first_names ?? [];
+  const imageUrls = Array.isArray(session?.image_urls)
+    ? session.image_urls.filter(Boolean)
+    : [];
 
   const sessionIsPast = useMemo(
     () => isPast(session?.start_time),
@@ -161,7 +167,7 @@ export default function SessionPanel() {
 
     try {
       setReserveLoading(true);
-      router.push(`/(modal)/booking/${session.id}`);
+      safePush(`/(modal)/booking/${session.id}`);
     } finally {
       setReserveLoading(false);
     }
@@ -174,27 +180,47 @@ export default function SessionPanel() {
       attendeeFirstNames.length >= 2 &&
       bookingsCount > attendeeFirstNames.length
     ) {
-      attendanceLabel = `${attendeeFirstNames[0]} + ${bookingsCount - 1} others going · ${
-        spotsLeft === 0 ? "Full" : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
+      attendanceLabel = `${attendeeFirstNames[0]} + ${
+        bookingsCount - 1
+      } others going · ${
+        spotsLeft === 0
+          ? "Full"
+          : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
       }`;
     } else if (attendeeFirstNames.length === 2) {
-      attendanceLabel = `${attendeeFirstNames[0]} and ${attendeeFirstNames[1]} going · ${
-        spotsLeft === 0 ? "Full" : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
+      attendanceLabel = `${attendeeFirstNames[0]} and ${
+        attendeeFirstNames[1]
+      } going · ${
+        spotsLeft === 0
+          ? "Full"
+          : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
       }`;
     } else if (attendeeFirstNames.length === 1 && bookingsCount > 1) {
-      attendanceLabel = `${attendeeFirstNames[0]} + ${bookingsCount - 1} others going · ${
-        spotsLeft === 0 ? "Full" : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
+      attendanceLabel = `${attendeeFirstNames[0]} + ${
+        bookingsCount - 1
+      } others going · ${
+        spotsLeft === 0
+          ? "Full"
+          : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
       }`;
     } else if (attendeeFirstNames.length === 1) {
       attendanceLabel = `${attendeeFirstNames[0]} is going · ${
-        spotsLeft === 0 ? "Full" : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
+        spotsLeft === 0
+          ? "Full"
+          : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
       }`;
     } else if (bookingsCount > 0) {
-      attendanceLabel = `${bookingsCount} ${bookingsCount === 1 ? "person" : "people"} going · ${
-        spotsLeft === 0 ? "Full" : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
+      attendanceLabel = `${bookingsCount} ${
+        bookingsCount === 1 ? "person" : "people"
+      } going · ${
+        spotsLeft === 0
+          ? "Full"
+          : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
       }`;
     } else {
-      attendanceLabel = `Be the first to join · ${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`;
+      attendanceLabel = `Be the first to join · ${spotsLeft} spot${
+        spotsLeft === 1 ? "" : "s"
+      } left`;
     }
   }
 
@@ -207,7 +233,7 @@ export default function SessionPanel() {
         onPress={() => {}}
         style={{
           flex: 1,
-          marginLeft: panelLeftMargin,
+          marginLeft: "0%",
           backgroundColor: "white",
           borderTopLeftRadius: 22,
           borderBottomLeftRadius: 22,
@@ -231,7 +257,7 @@ export default function SessionPanel() {
             <Pressable
               onPress={() => {
                 if (session?.teacher?.id) {
-                  router.push(`/(modal)/teacher/${session.teacher.id}`);
+                  safePush(`/(modal)/teacher/${session.teacher.id}`);
                 }
               }}
               style={{ flex: 1 }}
@@ -239,7 +265,7 @@ export default function SessionPanel() {
               <Text style={{ fontWeight: "700" }}>{teacherName}</Text>
             </Pressable>
 
-            {session?.teacher?.id && (
+            {session?.teacher?.id ? (
               <Pressable
                 onPress={() => toggleFollow(session.teacher!.id)}
                 disabled={followLoading}
@@ -259,19 +285,15 @@ export default function SessionPanel() {
                   {followLoading ? "..." : following ? "Following" : "Follow"}
                 </Text>
               </Pressable>
-            )}
+            ) : null}
           </View>
 
           {start ? <Text style={{ marginTop: 6 }}>{start}</Text> : null}
+
           <Text style={{ marginTop: 6, fontWeight: "800" }}>€{price}</Text>
 
           {attendanceLabel ? (
-            <Text
-              style={{
-                marginTop: 8,
-                fontWeight: "800",
-              }}
-            >
+            <Text style={{ marginTop: 8, fontWeight: "800" }}>
               {attendanceLabel}
             </Text>
           ) : null}
@@ -303,6 +325,29 @@ export default function SessionPanel() {
             </View>
           ) : (
             <>
+              {imageUrls.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ marginBottom: 16 }}
+                  contentContainerStyle={{ gap: 10 }}
+                >
+                  {imageUrls.map((url, index) => (
+                    <Image
+                      key={`${url}-${index}`}
+                      source={{ uri: url }}
+                      resizeMode="cover"
+                      style={{
+                        width: 260,
+                        height: 170,
+                        borderRadius: 18,
+                        backgroundColor: "#eee",
+                      }}
+                    />
+                  ))}
+                </ScrollView>
+              ) : null}
+
               {session?.class?.category ? (
                 <Text style={{ marginBottom: 10 }}>
                   Category: {session.class.category}

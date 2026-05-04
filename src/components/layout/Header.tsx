@@ -1,8 +1,10 @@
-import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { router, useSegments } from "expo-router";
+import { useSegments } from "expo-router";
+import React from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
+import { authStore } from "@/src/store/auth.store";
 
 const BLUE_BORDER = "#4E86FF";
 const BLACK_BG = "#000000";
@@ -11,11 +13,9 @@ const NAV_HEIGHT = 68;
 
 function ElevatorLogoMini() {
   return (
-    <View style={styles.logoMiniWrap}>
-      <View style={styles.logoMiniBox}>
-        <Text style={styles.logoMiniText}>▵</Text>
-        <Text style={styles.logoMiniText}>▿</Text>
-      </View>
+    <View style={styles.logoBox}>
+      <Text style={styles.logoArrowUp}>△</Text>
+      <Text style={styles.logoArrowDown}>▽</Text>
     </View>
   );
 }
@@ -24,18 +24,23 @@ export default function Header() {
   const insets = useSafeAreaInsets();
   const segments = useSegments();
 
+  const hasTeacherProfile = authStore((s) => s.hasTeacherProfile);
+
   const lastSegment = segments[segments.length - 1];
   const isProfile = lastSegment === "profile";
-  const isMap = lastSegment === "map";
 
-  const handleHomePress = () => {
-    if (isMap) return;
-    router.push("/(learner)/map");
+  // ✅ NEW: Teach button behavior (matches map screen)
+  const handleTeachPress = () => {
+    if (hasTeacherProfile) {
+      safePush("/(teacher)/dashboard");
+    } else {
+      safePush("/(teacher)/profile");
+    }
   };
 
   const handleMenuPress = () => {
     if (isProfile) return;
-    router.push("/(learner)/profile");
+    safePush("/(learner)/profile");
   };
 
   return (
@@ -49,8 +54,9 @@ export default function Header() {
       ]}
     >
       <View style={styles.headerRow}>
-        <Pressable onPress={handleHomePress} style={styles.headerSideButton}>
-          <Ionicons name="home-outline" size={26} color="#FFFFFF" />
+        {/* ✅ LEFT: Teach instead of Map */}
+        <Pressable onPress={handleTeachPress} style={styles.headerSideButton}>
+          <Ionicons name="school-outline" size={26} color="#FFFFFF" />
         </Pressable>
 
         <View pointerEvents="none" style={styles.headerCenter}>
@@ -58,6 +64,7 @@ export default function Header() {
           <Text style={styles.headerBrandText}>Elevator</Text>
         </View>
 
+        {/* RIGHT: Menu */}
         <Pressable onPress={handleMenuPress} style={styles.headerSideButton}>
           <Ionicons name="menu" size={26} color="#FFFFFF" />
         </Pressable>
@@ -68,8 +75,8 @@ export default function Header() {
 
 const styles = StyleSheet.create({
   header: {
-    borderBottomWidth: 4,
-    borderBottomColor: BLUE_BORDER,
+    borderBottomWidth: 1.2, // 🔥 matches your newer screens (less harsh)
+    borderBottomColor: "rgba(110,145,255,0.28)",
     backgroundColor: BLACK_BG,
     paddingHorizontal: 10,
   },
@@ -80,50 +87,66 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     position: "relative",
   },
-  headerCenter: {
-    position: "absolute",
-    left: 64,
-    right: 64,
-    top: 0,
-    bottom: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
+headerCenter: {
+  position: "absolute",
+  left: 64,
+  right: 64,
+  top: 0,
+  bottom: 0,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 9,
+    transform: [{ scaleX: 0.9 }, { scaleY: 0.9 }],
+
+},
+
+headerBrandText: {
+  color: TEXT_PRIMARY,
+  fontSize: 22,
+  fontWeight: "900",
+  fontStyle: "italic",
+  includeFontPadding: false,
+  textAlignVertical: "center",
+  lineHeight: 24,
+  letterSpacing: -0.4,
+},
   headerSideButton: {
     width: NAV_HEIGHT,
     height: NAV_HEIGHT,
     alignItems: "center",
     justifyContent: "center",
   },
-  headerBrandText: {
-    color: TEXT_PRIMARY,
-    fontSize: 21,
-    fontWeight: "900",
-    fontStyle: "italic",
-    includeFontPadding: false,
-    textAlignVertical: "center",
-    lineHeight: 22,
-  },
-  logoMiniWrap: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logoMiniBox: {
-    width: 22,
-    height: 28,
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.92)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 4,
-  },
-  logoMiniText: {
-    color: "rgba(255,255,255,0.96)",
-    fontSize: 10,
-    lineHeight: 10,
-    fontWeight: "900",
-    includeFontPadding: false,
-  },
+logoBox: {
+  width: 30,
+  height: 30,
+  borderWidth: 1.4,
+  borderColor: "rgba(255,255,255,0.92)",
+  borderRadius: 6,
+  alignItems: "center",
+  justifyContent: "center",
+  position: "relative",
+  transform: [{ scaleX: 0.9 }, { scaleY: 0.9 }],
+  
+},
+
+logoArrowUp: {
+  position: "absolute",
+  top: -1,
+  color: "#FFFFFF",
+  fontSize: 14,
+  fontWeight: "900",
+  lineHeight: 14,
+  transform: [{ scaleX: 1.25 }],
+},
+
+logoArrowDown: {
+  position: "absolute",
+  bottom: 1,
+  color: "#FFFFFF",
+  fontSize: 14,
+  fontWeight: "900",
+  lineHeight: 14,
+  transform: [{ scaleX: 1.25 }],
+},
 });

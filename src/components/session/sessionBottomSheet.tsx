@@ -1,32 +1,33 @@
-import React, {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  ActivityIndicator,
-  Dimensions,
-  Image,
-  LayoutChangeEvent,
-  Modal,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import {
-  BottomSheetBackdrop,
-  BottomSheetModal,
-  BottomSheetScrollView,
+    BottomSheetBackdrop,
+    BottomSheetModal,
+    BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
+import React, {
+    forwardRef,
+    useEffect,
+    useImperativeHandle,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
+import {
+    ActivityIndicator,
+    Dimensions,
+    Image,
+    LayoutChangeEvent,
+    Modal,
+    NativeScrollEvent,
+    NativeSyntheticEvent,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
+} from "react-native";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
+
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { API_BASE_URL } from "@/src/config/api";
@@ -295,7 +296,7 @@ export const SessionBottomSheet = forwardRef<any, Props>(
       onClose();
 
       requestAnimationFrame(() => {
-        router.push(`/(modal)/booking/${session.id}`);
+         safePush(`/(modal)/booking/${session.id}`);
       });
     };
 
@@ -306,7 +307,7 @@ export const SessionBottomSheet = forwardRef<any, Props>(
       onClose();
 
       requestAnimationFrame(() => {
-        router.push(`/(modal)/teacher/${teacherId}`);
+         safePush(`/(modal)/teacher/${teacherId}`);
       });
     };
 

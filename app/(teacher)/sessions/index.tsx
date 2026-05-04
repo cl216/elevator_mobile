@@ -1,5 +1,6 @@
+import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { router } from "expo-router";
 import {
   ActivityIndicator,
   Alert,
@@ -11,9 +12,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
-
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import {
   cancelSession,
   duplicateSession,
@@ -173,8 +172,15 @@ export default function TeacherSessionsScreen() {
         setStripeBlocked(false);
         setStripeBlockedMessage("");
 
-        const data = await getMySessions();
-        setSessions(Array.isArray(data) ? data : []);
+const data = await getMySessions();
+const rows = Array.isArray(data) ? data : [];
+
+const normalizedSessions: TeacherSession[] = rows.map((item: any) => ({
+  ...item,
+  end_time: item.end_time ?? item.start_time,
+}));
+
+setSessions(normalizedSessions);
       } catch (e: any) {
         const message =
           e?.response?.data?.message ??
@@ -363,7 +369,7 @@ export default function TeacherSessionsScreen() {
       >
         {showCreateButton ? (
           <Pressable
-            onPress={() => router.push("/(teacher)/sessions/create")}
+            onPress={() => safePush("/(teacher)/sessions/create")}
             style={({ pressed }) => [
               styles.primaryButton,
               pressed && styles.primaryButtonPressed,
@@ -386,6 +392,8 @@ export default function TeacherSessionsScreen() {
       Number(session.max_participants) - bookingsCount,
     );
     const isBusy = busySessionId === session.id;
+
+console.log("OPEN SESSION CARD ID:", session.id, session);
 
     return (
       <SessionsCard
@@ -441,7 +449,7 @@ export default function TeacherSessionsScreen() {
 
           <View style={styles.cardFooterActions}>
             <Pressable
-              onPress={() => router.push(`/(teacher)/sessions/${session.id}`)}
+              onPress={() => safePush(`/(teacher)/sessions/${session.id}`)}
               style={({ pressed }) => [
                 styles.secondaryPill,
                 pressed && styles.secondaryPillPressed,
@@ -454,7 +462,7 @@ export default function TeacherSessionsScreen() {
               <>
                 <Pressable
                   onPress={() =>
-                    router.push(`/(teacher)/sessions/${session.id}/edit`)
+                     safePush(`/(teacher)/sessions/${session.id}/edit`)
                   }
                   style={({ pressed }) => [
                     styles.secondaryPill,
@@ -516,7 +524,7 @@ export default function TeacherSessionsScreen() {
         subtitle="Create your first session to start appearing on the map and accepting bookings."
       >
         <Pressable
-          onPress={() => router.push("/(teacher)/sessions/create")}
+          onPress={() => safePush("/(teacher)/sessions/create")}
           style={({ pressed }) => [
             styles.primaryButton,
             pressed && styles.primaryButtonPressed,
@@ -559,7 +567,7 @@ export default function TeacherSessionsScreen() {
 
                 {!stripeBlocked ? (
                   <Pressable
-                    onPress={() => router.push("/(teacher)/sessions/create")}
+                    onPress={() => safePush("/(teacher)/sessions/create")}
                     style={({ pressed }) => [
                       styles.backButton,
                       pressed && styles.backButtonPressed,
@@ -708,7 +716,7 @@ export default function TeacherSessionsScreen() {
                 }
               >
                 <Pressable
-                  onPress={() => router.push("/(teacher)/dashboard")}
+                  onPress={() => safeReplace("/(teacher)/dashboard")}
                   style={({ pressed }) => [
                     styles.primaryButton,
                     pressed && styles.primaryButtonPressed,

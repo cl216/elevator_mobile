@@ -1,19 +1,19 @@
-import React, { useEffect, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    ScrollView,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
-import {
-  getClassById,
-  updateClass,
-} from "../../../../src/api/classes";
 import { getApprovedCategories } from "../../../../src/api/categories";
+import {
+    getClassById,
+    updateClass,
+} from "../../../../src/api/classes";
 import { uiToastStore } from "../../../../src/store/uiToast.store";
 
 type ApprovedCategory = {
@@ -109,7 +109,7 @@ export default function EditClassScreen() {
       });
 
       uiToastStore.getState().showToast("Class updated");
-      router.replace("/(teacher)/classes");
+       safeReplace("/(teacher)/classes");
     } catch (e: any) {
       console.error(e);
 

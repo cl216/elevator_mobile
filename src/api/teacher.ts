@@ -1,7 +1,27 @@
 import { api } from "./client";
 
-export async function getFollowStatus(teacherId: string) {
-  const res = await api.get(`/teacher/${teacherId}/follow-status`);
+export type TeacherProfilePayload = {
+  full_name?: string;
+  bio?: string;
+  image_url?: string;
+  gallery_image_urls?: string[];
+  image_url_1?: string;
+  image_url_2?: string;
+  image_url_3?: string;
+};
+
+export async function getMyTeacherProfile() {
+  const res = await api.get("/teacher/me/profile");
+  return res.data;
+}
+
+export async function createTeacherProfile(payload: TeacherProfilePayload) {
+  const res = await api.post("/teacher/profile", payload);
+  return res.data;
+}
+
+export async function getTeacherProfile(teacherId: string) {
+  const res = await api.get(`/teacher/${teacherId}/profile`);
   return res.data;
 }
 
@@ -15,34 +35,7 @@ export async function unfollowTeacher(teacherId: string) {
   return res.data;
 }
 
-export async function getTeacherProfile(teacherId: string) {
-  const res = await api.get(`/teacher/${teacherId}/profile`);
-  return res.data as {
-    id: string;
-    full_name: string;
-    bio: string | null;
-    image_url: string | null;
-    joined_at: string;
-    average_rating: number | null;
-    review_count: number;
-  };
-}
-
-export async function createTeacherProfile(input: {
-  full_name: string;
-  bio?: string;
-  image_url?: string;
-}) {
-  const res = await api.post("/teacher/profile", input);
-  return res.data;
-}
-
-export async function getMyTeacherProfile() {
-  const res = await api.get("/teacher/me/profile");
-  return res.data as {
-    id: string;
-    full_name: string;
-    bio: string | null;
-    image_url: string | null;
-  } | null;
+export async function getFollowStatus(teacherId: string) {
+  const res = await api.get(`/teacher/${teacherId}/follow-status`);
+  return res.data as { following: boolean };
 }

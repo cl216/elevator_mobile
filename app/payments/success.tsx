@@ -1,6 +1,5 @@
-import { router } from "expo-router";
-import { View, Text, Pressable } from "react-native";
-
+import { Pressable, Text, View } from "react-native";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 export default function PaymentSuccess() {
   return (
     <View
@@ -22,7 +21,7 @@ export default function PaymentSuccess() {
       </Text>
 
       <Pressable
-        onPress={() => router.replace("/(learner)/map")}
+        onPress={() => safeReplace("/(learner)/map")}
         style={{
           backgroundColor: "black",
           paddingVertical: 14,

@@ -1,12 +1,12 @@
+import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-
-import { authStore } from "@/src/store/auth.store";
+import { Alert } from "react-native";
+import { deleteAccount } from "@/src/api/auth";
 import AppLayout from "@/src/components/layout/AppLayout";
 import { AppScreen } from "@/src/components/ui/AppScreen";
-
+import { authStore } from "@/src/store/auth.store";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 const COLORS = {
   bg: "#05070F",
   surface: "#0D1424",
@@ -27,6 +27,29 @@ const COLORS = {
   buttonSecondary: "#121A2C",
 
   divider: "rgba(255,255,255,0.06)",
+};
+
+const handleDeleteAccount = () => {
+  Alert.alert(
+    "Delete your account?",
+    "This will permanently delete:\n\n• Your profile\n• Your sessions\n• Your bookings\n• Your requests\n• Your notifications\n\nThis action cannot be undone.",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete permanently",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteAccount();
+            await authStore.getState().clearAuthLocalOnly();
+            safeReplace("/(auth)/login");
+          } catch (e: any) {
+            Alert.alert("Error", "Could not delete account.");
+          }
+        },
+      },
+    ],
+  );
 };
 
 type ProfileCardProps = {
@@ -94,7 +117,7 @@ export default function ProfileScreen() {
 
   const handleLogout = async () => {
     await logout();
-    router.replace("/(auth)/login");
+    safeReplace("/(auth)/login");
   };
 
   return (
@@ -118,7 +141,7 @@ export default function ProfileScreen() {
             title="Payment methods"
             body="View saved cards for quicker checkout and manage how you pay."
             cta="View saved cards"
-            onPress={() => router.push("/(learner)/payment-methods")}
+            onPress={() => safePush("/(learner)/payment-methods")}
           />
 
           <ProfileCard
@@ -126,7 +149,7 @@ export default function ProfileScreen() {
             title="Private session requests"
             body="Track your private 1:1 requests, review statuses, and see any teacher notes."
             cta="View requests"
-            onPress={() => router.push("/(learner)/private-session-requests")}
+            onPress={() => safePush("/(learner)/private-session-requests")}
           />
 
           <ProfileCard
@@ -140,13 +163,23 @@ export default function ProfileScreen() {
             cta={hasTeacherProfile ? "Go to dashboard" : "Become a teacher"}
             onPress={() => {
               if (hasTeacherProfile) {
-                router.replace("/(teacher)/dashboard");
+                safeReplace("/(teacher)/dashboard");
                 return;
               }
 
-              router.push("/(teacher)/profile");
+              safePush("/(teacher)/profile");
             }}
           />
+
+          <ProfileCard
+            icon="trash-outline"
+            title="Delete account"
+            body="Permanently delete your account and all associated data. This cannot be undone."
+            cta="Delete account"
+            onPress={handleDeleteAccount}
+            danger
+          />
+
 
           <ProfileCard
             icon="person-circle-outline"
@@ -154,8 +187,13 @@ export default function ProfileScreen() {
             body="Manage your account and sign out securely when needed."
             cta="Logout"
             onPress={handleLogout}
-            danger
           />
+
+
+
+
+
+
         </View>
       </AppScreen>
     </AppLayout>
@@ -292,12 +330,16 @@ const styles = StyleSheet.create({
   },
 
   ctaButtonSecondary: {
-    backgroundColor: COLORS.buttonSecondary,
+    backgroundColor: "#8b000086",
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: "#FF4D4D",
+    borderRadius: 16,
+
   },
 
   ctaButtonTextSecondary: {
-    color: COLORS.text,
+    color: "#ffffff", // red text
+    fontWeight: "900",
   },
+
 });

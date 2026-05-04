@@ -1,20 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { router } from "expo-router";
 import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 
+import {
+    getMyTeacherPrivateSessionRequests,
+    type PrivateSessionRequest,
+} from "@/src/api/privateSessionRequests";
 import AppLayout from "@/src/components/layout/AppLayout";
 import { AppScreen } from "@/src/components/ui/AppScreen";
-import {
-  getMyTeacherPrivateSessionRequests,
-  type PrivateSessionRequest,
-} from "@/src/api/privateSessionRequests";
 
 const COLORS = {
   bg: "#05070F",
@@ -150,7 +150,7 @@ export default function TeacherPrivateSessionRequestsScreen() {
                 <Pressable
                   key={item.id}
                   onPress={() =>
-                    router.push(`/(teacher)/private-session-requests/${item.id}`)
+                     safePush(`/(teacher)/private-session-requests/${item.id}`)
                   }
                   style={styles.card}
                 >

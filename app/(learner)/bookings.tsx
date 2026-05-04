@@ -1,5 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import AppLayout from "@/src/components/layout/AppLayout";
+import { AppScreen } from "@/src/components/ui/AppScreen";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import {
   ActivityIndicator,
   Alert,
@@ -10,9 +14,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import AppLayout from "@/src/components/layout/AppLayout";
-import { AppScreen } from "@/src/components/ui/AppScreen";
 
 import { api } from "../../src/api/client";
 import { ExplainCard } from "../../src/components/ui/ExplainCard";
@@ -285,7 +286,7 @@ export default function LearnerBookingsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [showBookingsExplainCard, setShowBookingsExplainCard] = useState(false);
+  const [showBookingsExplainCard, setShowBookingsExplainCard] = useState(true);
   const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(
     null,
   );
@@ -440,7 +441,7 @@ export default function LearnerBookingsScreen() {
         key={booking.booking_id}
         onPress={() => {
           if (booking.booking_id) {
-            router.push(`/(learner)/booking/${booking.booking_id}`);
+             safePush(`/(learner)/booking/${booking.booking_id}`);
           }
         }}
         style={styles.cardOuter}
@@ -504,7 +505,7 @@ export default function LearnerBookingsScreen() {
                 <Pressable
                   onPress={(e) => {
                     e.stopPropagation();
-                    router.push(`/(learner)/review/${booking.booking_id}`);
+                     safePush(`/(learner)/review/${booking.booking_id}`);
                   }}
                   style={styles.secondaryButton}
                 >
@@ -571,7 +572,7 @@ export default function LearnerBookingsScreen() {
 
           {showBrowse ? (
             <Pressable
-              onPress={() => router.replace("/(learner)/map")}
+              onPress={() => safeReplace("/(learner)/map")}
               style={styles.primaryButton}
             >
               <Text style={styles.primaryButtonText}>Browse classes</Text>
@@ -615,16 +616,16 @@ export default function LearnerBookingsScreen() {
           </View>
         </View>
 
-        {showBookingsExplainCard ? (
+        {/* {showBookingsExplainCard ? (
           <ExplainCard
             title="Your bookings live here"
             body="Upcoming sessions stay at the top. Tap any booking to open the booking details. Past eligible classes can also be reviewed here."
             ctaText="Browse classes"
-            onPressCta={() => router.replace("/(learner)/map")}
+            onPressCta={() =>  safeReplace("/(learner)/map")}
             dismissText="Got it"
             onDismiss={handleDismissBookingsExplainCard}
           />
-        ) : null}
+        ) : null} */}
 
         {loading ? (
           <View style={styles.loadingState}>

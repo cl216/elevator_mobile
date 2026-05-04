@@ -1,8 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import Mapbox from "@rnmapbox/maps";
+import * as Linking from "expo-linking";
 import { router } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -11,20 +18,22 @@ import {
   TextInput,
   View,
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
-import Mapbox from "@rnmapbox/maps";
-import * as Linking from "expo-linking";
-import { Ionicons } from "@expo/vector-icons";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 
 import { getApprovedCategories } from "../../../src/api/categories";
-import { createSession } from "../../../src/api/sessions";
 import { api } from "../../../src/api/client";
+import {
+  createSession,
+  getSessionById,
+  updateSession,
+} from "../../../src/api/sessions";
+import { uploadImage } from "../../../src/api/uploads";
 import { ExplainCard } from "../../../src/components/ui/ExplainCard";
+import { uiToastStore } from "../../../src/store/uiToast.store";
 import {
   hasSeenExplainCard,
   markExplainCardSeen,
 } from "../../../src/utils/explainCard";
-import { uiToastStore } from "../../../src/store/uiToast.store";
 
 import AppLayout from "@/src/components/layout/AppLayout";
 import { AppScreen } from "@/src/components/ui/AppScreen";
@@ -74,6 +83,9 @@ const COLORS = {
   warningBorder: "rgba(255, 193, 7, 0.22)",
   warningText: "#FFD666",
 
+  successBg: "rgba(80, 200, 120, 0.14)",
+  successBorder: "rgba(80, 200, 120, 0.28)",
+
   divider: "rgba(255,255,255,0.06)",
 };
 
@@ -89,7 +101,17 @@ function FieldCard({ title, subtitle, children }: FieldCardProps) {
   );
 }
 
-export default function CreateSessionScreen() {
+type CreateSessionScreenProps = {
+  mode?: "create" | "edit";
+  sessionId?: string;
+};
+
+export default function CreateSessionScreen({
+  mode = "create",
+  sessionId,
+}: CreateSessionScreenProps) {
+
+
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<string>("");
 
@@ -125,9 +147,11 @@ export default function CreateSessionScreen() {
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
+  const [loadingSession, setLoadingSession] = useState(mode === "edit");
   const [stripeStatusLoading, setStripeStatusLoading] = useState(true);
-  const [stripeEnabled, setStripeEnabled] = useState(false);
+  const [stripeReady, setStripeReady] = useState(false);
   const [showSessionExplainCard, setShowSessionExplainCard] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
 
   async function loadCategories() {
     try {
@@ -156,9 +180,93 @@ export default function CreateSessionScreen() {
     }
   }
 
+  async function pickImage(setter: (uri: string) => void) {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Please allow photo access to choose images.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.55,
+    });
+
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      setter(result.assets[0].uri);
+    }
+  }
+
   useEffect(() => {
     loadCategories();
   }, []);
+
+
+  useEffect(() => {
+    if (mode !== "edit" || !sessionId) return;
+
+    let alive = true;
+
+    (async () => {
+      try {
+        setLoadingSession(true);
+
+        const data = await getSessionById(sessionId);
+
+        if (!alive) return;
+
+        setTitle(data?.class?.title ?? "");
+        setCategory(data?.class?.category ?? "");
+        setDescription(data?.class?.description ?? "");
+
+        setPrice(
+          typeof data?.price === "number" && Number.isFinite(data.price)
+            ? String(data.price)
+            : "",
+        );
+
+        setImageUrl1(data?.image_urls?.[0] ?? "");
+        setImageUrl2(data?.image_urls?.[1] ?? "");
+        setImageUrl3(data?.image_urls?.[2] ?? "");
+
+        setStartDate(data?.start_time ? new Date(data.start_time) : new Date());
+        setDuration(String(data?.duration ?? 90));
+        setMaxParticipants(String(data?.max_participants ?? 6));
+
+        setLat(
+          typeof data?.lat === "number" && Number.isFinite(data.lat)
+            ? String(data.lat)
+            : "",
+        );
+
+        setLng(
+          typeof data?.lng === "number" && Number.isFinite(data.lng)
+            ? String(data.lng)
+            : "",
+        );
+
+        setRoughLocation(data?.rough_location ?? "");
+        setArrivalInstructions(data?.arrival_instructions ?? "");
+
+        if (data?.rough_location) {
+          setSelectedAddress(data.rough_location);
+          setAddressQuery(data.rough_location);
+        }
+      } catch (e: any) {
+        console.error(e);
+        Alert.alert("Session error", "Could not load this session.");
+        router.back();
+      } finally {
+        if (alive) setLoadingSession(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [mode, sessionId]);
 
   useEffect(() => {
     let alive = true;
@@ -169,11 +277,16 @@ export default function CreateSessionScreen() {
         const res = await api.get("/teacher/stripe/status");
 
         if (!alive) return;
-        setStripeEnabled(!!res?.data?.stripe_enabled);
+
+        setStripeReady(
+          !!res?.data?.stripe_enabled &&
+          !!res?.data?.charges_enabled &&
+          !!res?.data?.payouts_enabled,
+        );
       } catch (e) {
         console.error("stripe status load failed", e);
         if (!alive) return;
-        setStripeEnabled(false);
+        setStripeReady(false);
       } finally {
         if (!alive) return;
         setStripeStatusLoading(false);
@@ -188,7 +301,7 @@ export default function CreateSessionScreen() {
   useEffect(() => {
     (async () => {
       const seen = await hasSeenExplainCard("create-session-intro");
-      setShowSessionExplainCard(!seen);
+      setShowSessionExplainCard(mode === "create" && !seen);
     })();
   }, []);
 
@@ -209,6 +322,18 @@ export default function CreateSessionScreen() {
         minute: "2-digit",
       }),
     [startDate],
+  );
+
+  const selectedCategoryLabel = useMemo(() => {
+    return categories.find((item) => item.slug === category)?.label ?? category;
+  }, [categories, category]);
+
+  const selectedImages = useMemo(
+    () =>
+      [imageUrl1, imageUrl2, imageUrl3]
+        .map((item) => item.trim())
+        .filter(Boolean),
+    [imageUrl1, imageUrl2, imageUrl3],
   );
 
   const previewCoordinate = useMemo(() => {
@@ -269,7 +394,7 @@ export default function CreateSessionScreen() {
     }
   }
 
-  async function handleSave() {
+  function validateBeforeReview() {
     const parsedPrice = Number(price);
     const parsedDuration = Number(duration);
     const parsedMaxParticipants = Number(maxParticipants);
@@ -278,43 +403,40 @@ export default function CreateSessionScreen() {
 
     if (!title.trim()) {
       Alert.alert("Missing title", "Please enter a session title.");
-      return;
+      return false;
     }
 
     if (!category) {
       Alert.alert("Missing category", "Please select a category.");
-      return;
+      return false;
     }
 
     if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
       Alert.alert("Invalid price", "Please enter a valid price.");
-      return;
+      return false;
     }
 
     if (!Number.isFinite(parsedDuration) || parsedDuration <= 0) {
       Alert.alert("Invalid duration", "Please enter a valid duration in minutes.");
-      return;
+      return false;
     }
 
     if (!Number.isFinite(parsedMaxParticipants) || parsedMaxParticipants <= 0) {
-      Alert.alert(
-        "Invalid capacity",
-        "Please enter a valid max participant count.",
-      );
-      return;
+      Alert.alert("Invalid capacity", "Please enter a valid max participant count.");
+      return false;
     }
 
     if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLng)) {
-      Alert.alert("Invalid location", "Please choose a valid address.");
-      return;
+      Alert.alert("Invalid location", "Please choose a valid exact address.");
+      return false;
     }
 
     if (!roughLocation.trim()) {
       Alert.alert(
-        "Missing rough location",
-        "Please enter a rough location label like Ranelagh, Dublin 6.",
+        "Missing public location",
+        "Please enter the rough location learners will see before booking.",
       );
-      return;
+      return false;
     }
 
     if (arrivalInstructions.trim().length > 300) {
@@ -322,15 +444,15 @@ export default function CreateSessionScreen() {
         "Arrival instructions too long",
         "Arrival instructions must be 300 characters or fewer.",
       );
-      return;
+      return false;
     }
 
     if (startDate <= new Date()) {
       Alert.alert("Invalid start time", "Please choose a future date and time.");
-      return;
+      return false;
     }
 
-    if (!stripeEnabled) {
+    if (!stripeReady) {
       Alert.alert(
         "Complete payouts setup first",
         "Before you can publish a session, you need to finish Stripe onboarding so we can send your payouts.",
@@ -342,20 +464,52 @@ export default function CreateSessionScreen() {
           },
         ],
       );
-      return;
+      return false;
     }
+
+    return true;
+  }
+
+  function handleReview() {
+    if (!validateBeforeReview()) return;
+    setShowReviewModal(true);
+  }
+
+  async function handlePublish() {
+    const parsedPrice = Number(price);
+    const parsedDuration = Number(duration);
+    const parsedMaxParticipants = Number(maxParticipants);
+    const parsedLat = Number(lat);
+    const parsedLng = Number(lng);
 
     try {
       setSaving(true);
 
-      await createSession({
+      const uploadedImages: string[] = [];
+
+      for (const image of selectedImages) {
+        const trimmed = image.trim();
+
+        if (!trimmed) continue;
+
+        if (trimmed.startsWith("file://")) {
+          console.log("UPLOADING LOCAL IMAGE URI:", trimmed);
+          const uploadedUrl = await uploadImage(trimmed);
+          uploadedImages.push(uploadedUrl);
+        } else {
+          console.log("KEEPING EXISTING IMAGE URL:", trimmed);
+          uploadedImages.push(trimmed);
+        }
+      }
+
+      const payload = {
         title: title.trim(),
         category,
         description: description.trim() || undefined,
         price: parsedPrice,
-        image_url_1: imageUrl1.trim() || undefined,
-        image_url_2: imageUrl2.trim() || undefined,
-        image_url_3: imageUrl3.trim() || undefined,
+        image_url_1: uploadedImages[0],
+        image_url_2: uploadedImages[1],
+        image_url_3: uploadedImages[2],
         start_time: startDate.toISOString(),
         duration: parsedDuration,
         max_participants: parsedMaxParticipants,
@@ -363,10 +517,18 @@ export default function CreateSessionScreen() {
         lng: parsedLng,
         rough_location: roughLocation.trim(),
         arrival_instructions: arrivalInstructions.trim() || undefined,
-      });
+      };
 
-      uiToastStore.getState().showToast("Session created");
-      router.replace("/(teacher)/sessions");
+      if (mode === "edit" && sessionId) {
+        await updateSession(sessionId, payload);
+        uiToastStore.getState().showToast("Session updated");
+      } else {
+        await createSession(payload);
+        uiToastStore.getState().showToast("Session created");
+      }
+
+      setShowReviewModal(false);
+      safeReplace("/(teacher)/sessions");
     } catch (e: any) {
       console.error(e);
 
@@ -374,16 +536,13 @@ export default function CreateSessionScreen() {
       const message =
         e?.response?.data?.message ??
         e?.message ??
-        "Could not create session.";
+        (mode === "edit" ? "Could not update session." : "Could not create session.");
 
       const normalizedMessage = Array.isArray(message)
         ? message.join("\n")
         : String(message);
 
-      if (
-        status === 403 &&
-        normalizedMessage.toLowerCase().includes("stripe")
-      ) {
+      if (status === 403 && normalizedMessage.toLowerCase().includes("stripe")) {
         Alert.alert(
           "Complete payouts setup first",
           "Before you can publish a session, you need to finish Stripe onboarding so we can send your payouts.",
@@ -404,6 +563,19 @@ export default function CreateSessionScreen() {
     }
   }
 
+  if (mode === "edit" && loadingSession) {
+    return (
+      <AppLayout>
+        <AppScreen>
+          <View style={styles.loadingFullScreen}>
+            <ActivityIndicator color={COLORS.accent} />
+            <Text style={styles.loadingText}>Loading session…</Text>
+          </View>
+        </AppScreen>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
       <AppScreen>
@@ -414,12 +586,16 @@ export default function CreateSessionScreen() {
         >
           <View style={styles.hero}>
             <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>Create session</Text>
+              <Text style={styles.heroBadgeText}>
+                {mode === "edit" ? "Edit session" : "Create session"}
+              </Text>
             </View>
 
-            <Text style={styles.heroTitle}>Create a bookable session</Text>
+            <Text style={styles.heroTitle}>
+              {mode === "edit" ? "Edit your session" : "Create a bookable session"}
+            </Text>
             <Text style={styles.heroSubtitle}>
-              Add the title, price, time, images, and location learners will see.
+              Add the title, price, time, photos, and location learners will see.
             </Text>
           </View>
 
@@ -438,7 +614,7 @@ export default function CreateSessionScreen() {
                 <Text style={styles.infoTitle}>Checking payouts setup…</Text>
               </View>
             </View>
-          ) : !stripeEnabled ? (
+          ) : !stripeReady ? (
             <View style={styles.warningOuter}>
               <View style={styles.warningInner}>
                 <Text style={styles.warningTitle}>Finish payouts setup first</Text>
@@ -454,9 +630,7 @@ export default function CreateSessionScreen() {
                     pressed && styles.primaryButtonPressed,
                   ]}
                 >
-                  <Text style={styles.primaryButtonText}>
-                    Continue onboarding
-                  </Text>
+                  <Text style={styles.primaryButtonText}>Continue onboarding</Text>
                 </Pressable>
               </View>
             </View>
@@ -478,36 +652,48 @@ export default function CreateSessionScreen() {
                 <ActivityIndicator color={COLORS.accent} />
                 <Text style={styles.loadingText}>Loading categories…</Text>
               </View>
-            ) : categories.length === 0 ? (
-              <Text style={styles.bodyText}>
-                No approved categories are available yet.
-              </Text>
             ) : (
-              <View style={styles.categoryList}>
-                {categories.map((option) => {
-                  const selected = category === option.slug;
+              <>
+                <View style={styles.categoryList}>
+                  {categories.map((option) => {
+                    const selected = category === option.slug;
 
-                  return (
-                    <Pressable
-                      key={option.id}
-                      onPress={() => setCategory(option.slug)}
-                      style={[
-                        styles.categoryChip,
-                        selected && styles.categoryChipSelected,
-                      ]}
-                    >
-                      <Text
+                    return (
+                      <Pressable
+                        key={option.id}
+                        onPress={() => setCategory(option.slug)}
                         style={[
-                          styles.categoryChipText,
-                          selected && styles.categoryChipTextSelected,
+                          styles.categoryChip,
+                          selected && styles.categoryChipSelected,
                         ]}
                       >
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+                        <Text
+                          style={[
+                            styles.categoryChipText,
+                            selected && styles.categoryChipTextSelected,
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Pressable
+                  onPress={() => safePush("/(modal)/propose-category")}
+                  style={styles.suggestCategoryButton}
+                >
+                  <Ionicons name="add-circle-outline" size={18} color={COLORS.text} />
+                  <Text style={styles.suggestCategoryButtonText}>
+                    Suggest new category
+                  </Text>
+                </Pressable>
+
+                <Text style={styles.suggestCategoryHelper}>
+                  Suggestions are reviewed before being added to the platform.
+                </Text>
+              </>
             )}
           </FieldCard>
 
@@ -523,39 +709,35 @@ export default function CreateSessionScreen() {
           </FieldCard>
 
           <FieldCard
-            title="Images"
-            subtitle="You can add up to three image URLs for the session gallery."
+            title="Photos"
+            subtitle="Choose up to three photos for the session gallery."
           >
-            <View style={styles.inputStack}>
-              <TextInput
-                value={imageUrl1}
-                onChangeText={setImageUrl1}
-                placeholder="Image 1 URL"
-                placeholderTextColor={COLORS.textMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={styles.input}
-              />
+            <View style={styles.galleryPickerStack}>
+              {[setImageUrl1, setImageUrl2, setImageUrl3].map((setter, index) => {
+                const value = [imageUrl1, imageUrl2, imageUrl3][index];
 
-              <TextInput
-                value={imageUrl2}
-                onChangeText={setImageUrl2}
-                placeholder="Image 2 URL"
-                placeholderTextColor={COLORS.textMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={styles.input}
-              />
+                return (
+                  <View key={index} style={styles.imagePickerBlock}>
+                    <Pressable
+                      onPress={() => pickImage(setter)}
+                      style={styles.ctaButton}
+                    >
+                      <Ionicons name="images-outline" size={18} color={COLORS.text} />
+                      <Text style={styles.ctaButtonText}>
+                        {value ? `Change photo ${index + 1}` : `Choose photo ${index + 1}`}
+                      </Text>
+                    </Pressable>
 
-              <TextInput
-                value={imageUrl3}
-                onChangeText={setImageUrl3}
-                placeholder="Image 3 URL"
-                placeholderTextColor={COLORS.textMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={styles.input}
-              />
+                    {value.trim() ? (
+                      <Image
+                        source={{ uri: value.trim() }}
+                        style={styles.sessionImagePreview}
+                        resizeMode="cover"
+                      />
+                    ) : null}
+                  </View>
+                );
+              })}
             </View>
           </FieldCard>
 
@@ -580,11 +762,7 @@ export default function CreateSessionScreen() {
                   <Text style={styles.selectLabel}>Session date</Text>
                   <Text style={styles.selectValue}>{formattedDate}</Text>
                 </View>
-                <Ionicons
-                  name="calendar-outline"
-                  size={18}
-                  color={COLORS.textMuted}
-                />
+                <Ionicons name="calendar-outline" size={18} color={COLORS.textMuted} />
               </Pressable>
 
               <Pressable
@@ -595,11 +773,7 @@ export default function CreateSessionScreen() {
                   <Text style={styles.selectLabel}>Session time</Text>
                   <Text style={styles.selectValue}>{formattedTime}</Text>
                 </View>
-                <Ionicons
-                  name="time-outline"
-                  size={18}
-                  color={COLORS.textMuted}
-                />
+                <Ionicons name="time-outline" size={18} color={COLORS.textMuted} />
               </Pressable>
             </View>
           </FieldCard>
@@ -641,29 +815,99 @@ export default function CreateSessionScreen() {
             />
           )}
 
-          <FieldCard title="Capacity">
-            <View style={styles.inputStack}>
+          <FieldCard
+            title="Session size"
+            subtitle="Set how long the session lasts and how many learners can book."
+          >
+            <View style={styles.fieldBlock}>
+              <Text style={styles.label}>Duration</Text>
+              <Text style={styles.helperText}>How long will this class run?</Text>
+
+              <View style={styles.presetRow}>
+                {["60", "90", "120"].map((value) => {
+                  const selected = duration === value;
+
+                  return (
+                    <Pressable
+                      key={value}
+                      onPress={() => setDuration(value)}
+                      style={[styles.presetChip, selected && styles.presetChipSelected]}
+                    >
+                      <Text
+                        style={[
+                          styles.presetChipText,
+                          selected && styles.presetChipTextSelected,
+                        ]}
+                      >
+                        {value} min
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
               <TextInput
                 value={duration}
                 onChangeText={setDuration}
                 keyboardType="numeric"
-                placeholder="Duration (minutes)"
+                placeholder="Custom duration, e.g. 75"
                 placeholderTextColor={COLORS.textMuted}
                 style={styles.input}
               />
+            </View>
+
+            <View style={styles.fieldBlockLast}>
+              <Text style={styles.label}>Learner capacity</Text>
+              <Text style={styles.helperText}>
+                Maximum number of learners who can book this session.
+              </Text>
+
+              <View style={styles.presetRow}>
+                {["1", "4", "6", "10"].map((value) => {
+                  const selected = maxParticipants === value;
+
+                  return (
+                    <Pressable
+                      key={value}
+                      onPress={() => setMaxParticipants(value)}
+                      style={[styles.presetChip, selected && styles.presetChipSelected]}
+                    >
+                      <Text
+                        style={[
+                          styles.presetChipText,
+                          selected && styles.presetChipTextSelected,
+                        ]}
+                      >
+                        {value}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
 
               <TextInput
                 value={maxParticipants}
                 onChangeText={setMaxParticipants}
                 keyboardType="numeric"
-                placeholder="Max participants"
+                placeholder="Custom capacity, e.g. 8"
                 placeholderTextColor={COLORS.textMuted}
                 style={styles.input}
               />
             </View>
           </FieldCard>
 
-          <FieldCard title="Address">
+          <FieldCard
+            title="Exact address"
+            subtitle="Needed for bookings. Learners only see this after they book."
+          >
+            <View style={styles.noticeBox}>
+              <Ionicons name="lock-closed-outline" size={16} color={COLORS.accent} />
+              <Text style={styles.noticeText}>
+                This exact address is private while learners browse. It is shared
+                only with booked learners.
+              </Text>
+            </View>
+
             <TextInput
               value={selectedAddress ?? addressQuery}
               onChangeText={(text) => {
@@ -672,9 +916,9 @@ export default function CreateSessionScreen() {
                 setLng("");
                 searchAddress(text);
               }}
-              placeholder="Search address"
+              placeholder="Search full address"
               placeholderTextColor={COLORS.textMuted}
-              style={styles.input}
+              style={[styles.input, styles.inputTopGap]}
             />
 
             {addressResults.length > 0 && !selectedAddress ? (
@@ -703,40 +947,14 @@ export default function CreateSessionScreen() {
             ) : null}
 
             {selectedAddress ? (
-              <Text style={styles.helperInline}>Selected: {selectedAddress}</Text>
+              <View style={styles.selectedAddressBox}>
+                <Ionicons name="checkmark-circle-outline" size={16} color={COLORS.accent} />
+                <Text style={styles.selectedAddressText}>{selectedAddress}</Text>
+              </View>
             ) : null}
-          </FieldCard>
 
-          <FieldCard
-            title="Rough location shown before booking"
-            subtitle="This is the safe area label learners see before booking. Do not enter the full exact address here."
-          >
-            <TextInput
-              value={roughLocation}
-              onChangeText={setRoughLocation}
-              placeholder="Ranelagh, Dublin 6"
-              placeholderTextColor={COLORS.textMuted}
-              style={styles.input}
-            />
-          </FieldCard>
-
-          <FieldCard
-            title="Arrival instructions"
-            subtitle="Optional. Shared with booked learners closer to the session."
-          >
-            <TextInput
-              value={arrivalInstructions}
-              onChangeText={setArrivalInstructions}
-              placeholder="Blue door, ring once, shoes off inside."
-              placeholderTextColor={COLORS.textMuted}
-              multiline
-              style={styles.textArea}
-            />
-          </FieldCard>
-
-          {previewCoordinate ? (
-            <FieldCard title="Location preview">
-              <View style={styles.mapPreview}>
+            {previewCoordinate ? (
+              <View style={styles.mapPreviewInline}>
                 <Mapbox.MapView
                   style={styles.mapPreviewInner}
                   styleURL="mapbox://styles/mapbox/standard"
@@ -761,24 +979,100 @@ export default function CreateSessionScreen() {
                   </Mapbox.PointAnnotation>
                 </Mapbox.MapView>
               </View>
-            </FieldCard>
-          ) : null}
+            ) : null}
+          </FieldCard>
+
+          <FieldCard
+            title="Public location"
+            subtitle="This is the rough area learners see while browsing."
+          >
+            <View style={styles.noticeBox}>
+              <Ionicons name="eye-outline" size={16} color={COLORS.accent} />
+              <Text style={styles.noticeText}>
+                Use a safe, helpful area label. For example: “Galway Docks”,
+                “Ranelagh, Dublin 6”, or “Beside Jervis Centre”.
+              </Text>
+            </View>
+
+            <TextInput
+              value={roughLocation}
+              onChangeText={setRoughLocation}
+              placeholder="Example: Galway Docks"
+              placeholderTextColor={COLORS.textMuted}
+              style={[styles.input, styles.inputTopGap]}
+            />
+          </FieldCard>
+
+          <FieldCard
+            title="Arrival instructions"
+            subtitle="Optional. Shared with booked learners so they can find you easily."
+          >
+            <TextInput
+              value={arrivalInstructions}
+              onChangeText={setArrivalInstructions}
+              placeholder="Example: Blue door, ring once, shoes off inside."
+              placeholderTextColor={COLORS.textMuted}
+              multiline
+              maxLength={300}
+              style={styles.textArea}
+            />
+
+            <Text style={styles.helperInline}>
+              {arrivalInstructions.trim().length}/300 characters
+            </Text>
+          </FieldCard>
+
+          <FieldCard
+            title="Review before publishing"
+            subtitle="Check exactly what learners will see before this goes live."
+          >
+            <View style={styles.previewCard}>
+              {selectedImages[0] ? (
+                <Image
+                  source={{ uri: selectedImages[0] }}
+                  style={styles.previewImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.previewImagePlaceholder}>
+                  <Ionicons name="image-outline" size={28} color={COLORS.textMuted} />
+                  <Text style={styles.previewImagePlaceholderText}>No photo selected</Text>
+                </View>
+              )}
+
+              <View style={styles.previewBody}>
+                <Text style={styles.previewTitle}>
+                  {title.trim() || "Your session title"}
+                </Text>
+                <Text style={styles.previewMeta}>
+                  {selectedCategoryLabel || "Category"} • €{price || "0"} • {duration} min
+                </Text>
+                <Text style={styles.previewMeta}>
+                  {formattedDate} at {formattedTime}
+                </Text>
+                <Text style={styles.previewMeta}>
+                  {maxParticipants || "0"} learner capacity
+                </Text>
+                <Text style={styles.previewLocation}>
+                  {roughLocation.trim() || "Public location will appear here"}
+                </Text>
+              </View>
+            </View>
+          </FieldCard>
 
           <Pressable
-            onPress={handleSave}
+            onPress={handleReview}
             disabled={saving || stripeStatusLoading || loadingCategories}
             style={({ pressed }) => [
               styles.primaryButton,
               pressed && !saving && styles.primaryButtonPressed,
               (saving || stripeStatusLoading || loadingCategories) &&
-                styles.primaryButtonDisabled,
+              styles.primaryButtonDisabled,
             ]}
           >
-            {saving ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Publish session</Text>
-            )}
+            <Text style={styles.primaryButtonText}>
+              {mode === "edit" ? "Review and save" : "Review and publish"}
+            </Text>
           </Pressable>
 
           <Pressable
@@ -792,6 +1086,67 @@ export default function CreateSessionScreen() {
             <Text style={styles.secondaryButtonText}>Cancel</Text>
           </Pressable>
         </ScrollView>
+
+        <Modal
+          transparent
+          visible={showReviewModal}
+          animationType="fade"
+          onRequestClose={() => {
+            if (!saving) setShowReviewModal(false);
+          }}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>
+                {mode === "edit" ? "Save changes?" : "Publish this session?"}
+              </Text>
+              <Text style={styles.modalSubtitle}>
+                Confirm the details below before making it bookable.
+              </Text>
+
+              <View style={styles.modalSummary}>
+                <Text style={styles.modalSummaryTitle}>{title.trim()}</Text>
+                <Text style={styles.modalSummaryText}>
+                  {selectedCategoryLabel} • €{price} • {duration} min
+                </Text>
+                <Text style={styles.modalSummaryText}>
+                  {formattedDate} at {formattedTime}
+                </Text>
+                <Text style={styles.modalSummaryText}>
+                  Public location: {roughLocation.trim()}
+                </Text>
+                <Text style={styles.modalSummaryMuted}>
+                  Exact address is only shared after booking.
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={handlePublish}
+                disabled={saving}
+                style={[
+                  styles.primaryButton,
+                  saving && styles.primaryButtonDisabled,
+                ]}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>
+                    {mode === "edit" ? "Save changes" : "Publish session"}
+                  </Text>
+                )}
+              </Pressable>
+
+              <Pressable
+                onPress={() => setShowReviewModal(false)}
+                disabled={saving}
+                style={styles.secondaryButton}
+              >
+                <Text style={styles.secondaryButtonText}>Keep editing</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
       </AppScreen>
     </AppLayout>
   );
@@ -800,10 +1155,11 @@ export default function CreateSessionScreen() {
 const styles = StyleSheet.create({
   scroll: {
     flex: 1,
-  paddingHorizontal: 20,
-  paddingTop: 24,
-  paddingBottom: 40,
-  flexGrow: 1,  },
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
+    flexGrow: 1,
+  },
 
   content: {
     paddingBottom: 24,
@@ -897,6 +1253,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
 
+  inputTopGap: {
+    marginTop: 12,
+  },
+
   textArea: {
     minHeight: 100,
     borderRadius: 14,
@@ -978,12 +1338,172 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
 
+  suggestCategoryButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: COLORS.surfaceSoft,
+    borderWidth: 1,
+    borderColor: COLORS.borderStrong,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+
+  suggestCategoryButtonText: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
+  suggestCategoryHelper: {
+    color: COLORS.textSoft,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 8,
+  },
+
+  galleryPickerStack: {
+    gap: 12,
+  },
+
+  imagePickerBlock: {
+    gap: 10,
+  },
+
+  ctaButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: "rgba(111,146,255,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(111,146,255,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+
+  ctaButtonText: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
+  sessionImagePreview: {
+    width: "100%",
+    height: 150,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.borderStrong,
+    backgroundColor: COLORS.surfaceSoft,
+  },
+
+  fieldBlock: {
+    marginBottom: 18,
+  },
+
+  fieldBlockLast: {
+    marginBottom: 0,
+  },
+
+  label: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+
+  helperText: {
+    color: COLORS.textSoft,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+
+  presetRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 10,
+  },
+
+  presetChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: COLORS.surfaceSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  presetChipSelected: {
+    backgroundColor: COLORS.accentSoft,
+    borderColor: COLORS.accentBorder,
+  },
+
+  presetChipText: {
+    color: COLORS.textSoft,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  presetChipTextSelected: {
+    color: COLORS.text,
+  },
+
+  noticeBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: COLORS.accentSoft,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+  },
+
+  noticeText: {
+    flex: 1,
+    color: COLORS.textSoft,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+
+  selectedAddressBox: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: COLORS.successBg,
+    borderWidth: 1,
+    borderColor: COLORS.successBorder,
+  },
+
+  selectedAddressText: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
+
   loadingWrap: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 18,
   },
-
+  loadingFullScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: COLORS.bg,
+  },
   loadingText: {
     color: COLORS.textSoft,
     marginTop: 10,
@@ -1070,12 +1590,13 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  mapPreview: {
+  mapPreviewInline: {
     height: 180,
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: COLORS.border,
+    marginTop: 12,
   },
 
   mapPreviewInner: {
@@ -1089,6 +1610,56 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.button,
     borderWidth: 2,
     borderColor: "#FFFFFF",
+  },
+
+  previewCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceSoft,
+    overflow: "hidden",
+  },
+
+  previewImage: {
+    width: "100%",
+    height: 170,
+  },
+
+  previewImagePlaceholder: {
+    height: 170,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.surfaceSoft,
+    gap: 8,
+  },
+
+  previewImagePlaceholderText: {
+    color: COLORS.textMuted,
+    fontWeight: "700",
+  },
+
+  previewBody: {
+    padding: 14,
+  },
+
+  previewTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 6,
+  },
+
+  previewMeta: {
+    color: COLORS.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  previewLocation: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "800",
+    marginTop: 8,
   },
 
   primaryButton: {
@@ -1133,5 +1704,63 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 15,
     fontWeight: "800",
+  },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.68)",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+
+  modalCard: {
+    borderRadius: 24,
+    borderWidth: 1.2,
+    borderColor: COLORS.borderStrong,
+    backgroundColor: COLORS.bg,
+    padding: 18,
+  },
+
+  modalTitle: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+
+  modalSubtitle: {
+    color: COLORS.textSoft,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 14,
+  },
+
+  modalSummary: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceSoft,
+    padding: 14,
+    marginBottom: 14,
+  },
+
+  modalSummaryTitle: {
+    color: COLORS.text,
+    fontSize: 17,
+    fontWeight: "900",
+    marginBottom: 6,
+  },
+
+  modalSummaryText: {
+    color: COLORS.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  modalSummaryMuted: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 8,
   },
 });

@@ -1,31 +1,34 @@
-import * as Location from "expo-location";
-import { router, useLocalSearchParams, usePathname } from "expo-router";
+import Header from "@/src/components/layout/Header";
+import Footer from "@/src/components/layout/Footer";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { useMapViewStore } from "../../src/store/mapView.store";
+import Mapbox from "@rnmapbox/maps";
+import { useLocalSearchParams, usePathname } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Animated,
   Easing,
-  Image,
-  Pressable,
+  Image, Modal, Pressable,
   StyleSheet,
   Text,
-  View,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Mapbox from "@rnmapbox/maps";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { ExplainCard } from "../../src/components/ui/ExplainCard";
+import { useMapViewStore } from "../../src/store/mapView.store";
 
-import { API_BASE_URL } from "../../src/config/api";
-import { api } from "../../src/api/client";
-import { authStore } from "../../src/store/auth.store";
 import {
   getApprovedCategories,
   type ApprovedCategory,
 } from "../../src/api/categories";
+import { api } from "../../src/api/client";
 import { getMyNotifications } from "../../src/api/notifications";
-import { ExplainCard } from "../../src/components/ui/ExplainCard";
 import { SessionBottomSheet } from "../../src/components/session/sessionBottomSheet";
+import { API_BASE_URL } from "../../src/config/api";
+import { authStore } from "../../src/store/auth.store";
 import {
   hasSeenExplainCard,
   markExplainCardSeen,
@@ -78,6 +81,7 @@ const MAP_STYLE_URL = "mapbox://styles/mapbox/dark-v11";
 const MARKER_FETCH_PAD = 0.05;
 const NEARBY_SUGGESTION_PAD = 2.0;
 const SILENT_REFRESH_MS = 30000;
+
 
 const PRIMARY_CATEGORY_SLUGS = [
   "art",
@@ -249,16 +253,6 @@ function CurrentLocationIcon() {
   return <Ionicons name="locate" size={22} color="#FFFFFF" />;
 }
 
-function ElevatorLogoMini() {
-  return (
-    <View style={styles.logoMiniWrap}>
-      <View style={styles.logoMiniBox}>
-        <Text style={styles.logoMiniText}>▵</Text>
-        <Text style={styles.logoMiniText}>▿</Text>
-      </View>
-    </View>
-  );
-}
 
 function getCategoryBadge(category?: MarkerCategory) {
   switch (category) {
@@ -372,6 +366,11 @@ export default function LearnerMap() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ focusSessionId?: string }>();
 
+  const isManualSearchRef = useRef(false);
+const isFetchingMapRef = useRef(false);
+
+  const hasCenteredOnInitialLocationRef = useRef(false);
+
   const pathname = usePathname();
   const isProfile = pathname === "/(learner)/profile";
 
@@ -400,7 +399,6 @@ export default function LearnerMap() {
     bbox: BBox;
     category: CategoryFilter;
   } | null>(null);
-  const isFetchingMapRef = useRef(false);
 
   const mapRef = useRef<Mapbox.MapView | null>(null);
   const cameraRef = useRef<Mapbox.Camera | null>(null);
@@ -614,10 +612,11 @@ export default function LearnerMap() {
 
   const handleOpenTeach = useCallback(() => {
     if (hasTeacherProfile) {
-      router.push("/(teacher)/dashboard");
+      safePush("/(teacher)/dashboard");
       return;
     }
-    router.push("/(learner)/profile");
+
+    safePush("/(teacher)/profile");
   }, [hasTeacherProfile]);
 
   useFocusEffect(
@@ -627,12 +626,17 @@ export default function LearnerMap() {
     }, [loadUnreadNotificationsCount, loadUpcomingBookingsCount]),
   );
 
-  useEffect(() => {
-    (async () => {
-      const seen = await hasSeenExplainCard("learner-map-intro");
-      setShowMapExplainCard(!seen);
-    })();
-  }, []);
+ ////FOR TESTING EXPLAINCARD
+// useEffect(() => {
+//   setShowMapExplainCard(true);
+// }, []);
+
+// useEffect(() => {
+//   (async () => {
+//     const seen = await hasSeenExplainCard("learner-map-intro");
+//     setShowMapExplainCard(!seen);
+//   })();
+// }, []);
 
   useEffect(() => {
     (async () => {
@@ -678,12 +682,12 @@ export default function LearnerMap() {
 
             const distance_meters = Math.sqrt(
               Math.pow((rowLat - centerLat) * 111_000, 2) +
-                Math.pow(
-                  (rowLng - centerLng) *
-                    111_000 *
-                    Math.cos((centerLat * Math.PI) / 180),
-                  2,
-                ),
+              Math.pow(
+                (rowLng - centerLng) *
+                111_000 *
+                Math.cos((centerLat * Math.PI) / 180),
+                2,
+              ),
             );
 
             return {
@@ -746,8 +750,15 @@ export default function LearnerMap() {
         }
 
         const res = await fetch(`${API_BASE_URL}/sessions/map?${qs.toString()}`);
-        if (!res.ok) return [];
-
+        if (!res.ok) {
+          if (!silent) {
+            Alert.alert(
+              "Could not search this area",
+              "Something went wrong while loading classes. Please try again.",
+            );
+          }
+          return [];
+        }
         const data = await res.json();
         const rows = Array.isArray(data) ? data : [];
 
@@ -786,6 +797,14 @@ export default function LearnerMap() {
         return next;
       } catch (e) {
         console.log("fetchSessionsForBBox error", e);
+
+        if (!silent) {
+          Alert.alert(
+            "Could not search this area",
+            "Something went wrong while loading classes. Please try again.",
+          );
+        }
+
         return [];
       } finally {
         if (!silent) {
@@ -799,6 +818,7 @@ export default function LearnerMap() {
 
   const fetchForCurrentMapNow = useCallback(async () => {
     try {
+          if (isManualSearchRef.current) return;
       if (!isInitialLocationResolved) return;
       if (currentZoomRef.current < 10) return;
       if (isFetchingMapRef.current) return;
@@ -879,6 +899,7 @@ export default function LearnerMap() {
 
   const prepareSearchThisArea = useCallback(async () => {
     try {
+          if (isManualSearchRef.current) return;
       if (currentZoomRef.current < 10) {
         setShowSearchThisArea(false);
         setPendingBBox(null);
@@ -964,70 +985,27 @@ export default function LearnerMap() {
     [openSessionSheet],
   );
 
-  useEffect(() => {
-    let alive = true;
+   //FOR TESTING EXPLAINCARD
+// useEffect(() => {
+//   setShowMapExplainCard(true);
+// }, []);
 
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (!alive) return;
 
-        if (status !== "granted") {
-          setLocError("Location permission denied.");
-          setIsInitialLocationResolved(true);
-          return;
-        }
+useEffect(() => {
+  let alive = true;
 
-        const current = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
+  (async () => {
+    const seen = await hasSeenExplainCard("learner-map-intro");
 
-        if (!alive) return;
+    if (alive) {
+      setShowMapExplainCard(!seen);
+    }
+  })();
 
-        const center: [number, number] = [
-          current.coords.longitude,
-          current.coords.latitude,
-        ];
-
-        setUserLocation(center);
-        setLocError(null);
-        setIsInitialLocationResolved(true);
-
-        if (hasFocusSessionParam) return;
-
-        if (hasHydratedView && savedMapCenter && typeof savedMapZoom === "number") {
-          cameraRef.current?.setCamera({
-            centerCoordinate: savedMapCenter,
-            zoomLevel: savedMapZoom,
-            animationDuration: 0,
-          });
-        } else {
-          cameraRef.current?.setCamera({
-            centerCoordinate: center,
-            zoomLevel: 13.5,
-            animationDuration: 700,
-          });
-        }
-
-        if (initialUserFetchTimerRef.current) {
-          clearTimeout(initialUserFetchTimerRef.current);
-        }
-
-        initialUserFetchTimerRef.current = setTimeout(() => {
-          fetchForCurrentMapNow();
-        }, 900);
-      } catch (e) {
-        console.log("initial location error", e);
-        if (!alive) return;
-        setLocError("Could not get your current location.");
-        setIsInitialLocationResolved(true);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [hasFocusSessionParam, hasHydratedView, savedMapCenter, savedMapZoom, fetchForCurrentMapNow]);
+  return () => {
+    alive = false;
+  };
+}, []);
 
   useEffect(() => {
     if (!isInitialLocationResolved) return;
@@ -1120,35 +1098,27 @@ export default function LearnerMap() {
   }, [sessions, selectedSessionId, closeSessionSheet]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      const active = activeSearchRef.current;
-      if (!active) return;
-      if (showSearchThisArea) return;
-      if (isMapLoading) return;
-      if (isFetchingMapRef.current) return;
-
-      fetchSessionsForBBox(active.bbox, active.category, { silent: true });
-    }, SILENT_REFRESH_MS);
-
-    return () => clearInterval(interval);
-  }, [fetchSessionsForBBox, showSearchThisArea, isMapLoading]);
-
-  useEffect(() => {
     return () => {
       if (focusFetchTimerRef.current) clearTimeout(focusFetchTimerRef.current);
       if (initialUserFetchTimerRef.current) clearTimeout(initialUserFetchTimerRef.current);
     };
   }, []);
 
-  const handleDismissMapExplainCard = useCallback(async () => {
-    await markExplainCardSeen("learner-map-intro");
-    setShowMapExplainCard(false);
-  }, []);
+const handleDismissMapExplainCard = useCallback(() => {
+  setShowMapExplainCard(false);
+
+  void markExplainCardSeen("learner-map-intro").catch((e) => {
+    console.log("mark map explain card seen error", e);
+  });
+}, []);
 
   const handleSearchThisArea = useCallback(async () => {
-    if (!pendingBBox || !pendingKey) return;
-    if (isMapLoading || isFetchingMapRef.current) return;
+  if (!pendingBBox || !pendingKey) return;
+  if (isMapLoading || isFetchingMapRef.current) return;
 
+  isManualSearchRef.current = true;
+
+  try {
     setEmptyAreaStateVisible(false);
     setNearbySuggestions([]);
     setShowSearchThisArea(false);
@@ -1169,15 +1139,20 @@ export default function LearnerMap() {
     );
 
     setEmptyAreaStateVisible(true);
-  }, [
-    fetchNearbySuggestions,
-    fetchSessionsForBBox,
-    pendingBBox,
-    pendingKey,
-    selectedCategory,
-    isMapLoading,
-    updateVisibleBBox,
-  ]);
+  } finally {
+    setTimeout(() => {
+      isManualSearchRef.current = false;
+    }, 300);
+  }
+}, [
+  fetchNearbySuggestions,
+  fetchSessionsForBBox,
+  pendingBBox,
+  pendingKey,
+  selectedCategory,
+  isMapLoading,
+  updateVisibleBBox,
+]);
 
   const handleCloseNearbySuggestions = useCallback(() => {
     setEmptyAreaStateVisible(false);
@@ -1237,7 +1212,7 @@ export default function LearnerMap() {
         ? selectedCategory
         : primaryCategoriesToShow[0]?.slug ?? "art";
 
-    router.push({
+    safePush({
       pathname: "/(modal)/request-class",
       params: {
         lat: String(centerLat),
@@ -1270,43 +1245,7 @@ export default function LearnerMap() {
 
   return (
     <View style={styles.screen}>
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top,
-            height: NAV_HEIGHT + insets.top,
-          },
-        ]}
-      >
-        <View style={styles.headerRow}>
-          <Pressable onPress={() => {}} style={styles.headerSideButton}>
-            <Ionicons name="home-outline" size={26} color="#FFFFFF" />
-          </Pressable>
-
-          <View pointerEvents="none" style={styles.headerCenter}>
-            <ElevatorLogoMini />
-            <Text style={styles.headerBrandText}>Elevator</Text>
-          </View>
-
-          <Pressable
-            onPress={() => {
-              if (isProfile) return;
-              router.push("/(learner)/profile");
-            }}
-            style={[
-              styles.headerSideButton,
-              isProfile && { opacity: 0.4 },
-            ]}
-          >
-            <Ionicons
-              name={isProfile ? "menu" : "menu-outline"}
-              size={26}
-              color="#FFFFFF"
-            />
-          </Pressable>
-        </View>
-      </View>
+    <Header />
 
       <View style={styles.mapFrame}>
         <Mapbox.MapView
@@ -1316,12 +1255,7 @@ export default function LearnerMap() {
           style={styles.map}
           styleURL={MAP_STYLE_URL}
           onDidFinishLoadingMap={() => {
-            if (hasHandledInitialMapLoadRef.current) return;
-
-            if (!hasFocusSessionParam && isInitialLocationResolved && userLocation) {
-              hasHandledInitialMapLoadRef.current = true;
-              fetchForCurrentMapNow();
-            }
+            hasHandledInitialMapLoadRef.current = true;
           }}
           onMapIdle={() => {
             prepareSearchThisArea();
@@ -1366,7 +1300,8 @@ export default function LearnerMap() {
               cameraRef.current = r;
             }}
             defaultSettings={{
-              zoomLevel: INITIAL_ZOOM,
+              centerCoordinate: userLocation ?? [-73.9857, 40.7484],
+              zoomLevel: 13.5,
               pitch: 0,
               heading: 0,
             }}
@@ -1376,7 +1311,28 @@ export default function LearnerMap() {
             visible
             androidRenderMode="gps"
             showsUserHeadingIndicator={false}
-            onUpdate={() => {}}
+            onUpdate={(location) => {
+              const lng = location?.coords?.longitude;
+              const lat = location?.coords?.latitude;
+
+              if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+
+              const nextLocation: [number, number] = [lng, lat];
+
+              setUserLocation(nextLocation);
+              setLocError(null);
+              setIsInitialLocationResolved(true);
+
+              if (!hasCenteredOnInitialLocationRef.current && !hasFocusSessionParam) {
+                hasCenteredOnInitialLocationRef.current = true;
+
+                cameraRef.current?.setCamera({
+                  centerCoordinate: nextLocation,
+                  zoomLevel: 13.5,
+                  animationDuration: 0,
+                });
+              }
+            }}
           />
 
           {showClusterSource ? (
@@ -1458,10 +1414,7 @@ export default function LearnerMap() {
 
                           cameraRef.current?.setCamera({
                             centerCoordinate: [s.lng, s.lat],
-                            zoomLevel: Math.max(
-                              currentZoomRef.current,
-                              CLUSTER_SWITCH_ZOOM + 0.5,
-                            ),
+                            zoomLevel: Math.max(currentZoomRef.current, CLUSTER_SWITCH_ZOOM + 0.5),
                             animationDuration: 250,
                           });
 
@@ -1484,105 +1437,122 @@ export default function LearnerMap() {
               })}
         </Mapbox.MapView>
 
+        {!userLocation ? (
+          <View style={styles.mapLoadingOverlay}>
+            <ActivityIndicator color={COLORS.accent} />
+            <Text style={styles.loadingText}>Getting your location…</Text>
+          </View>
+        ) : null}
+
         <View style={styles.topMapOverlay}>
           <View style={styles.topActionsRow}>
-            <Pressable
-              onPress={() => setShowCategoryMenu((prev) => !prev)}
-              style={styles.filterButton}
-            >
-              <Ionicons name="options-outline" size={18} color={COLORS.text} />
-              <Text style={styles.filterButtonText}>{selectedCategoryLabel}</Text>
-              <Ionicons
-                name={showCategoryMenu ? "chevron-up" : "chevron-down"}
-                size={15}
-                color={COLORS.text}
-              />
-            </Pressable>
+            <View style={styles.topColumn}>
+              <Pressable
+                onPress={() => setShowCategoryMenu((prev) => !prev)}
+                style={styles.filterButton}
+              >
+                <Ionicons name="options-outline" size={18} color={COLORS.text} />
+                <Text style={styles.filterButtonText}>{selectedCategoryLabel}</Text>
+                <Ionicons
+                  name={showCategoryMenu ? "chevron-up" : "chevron-down"}
+                  size={15}
+                  color={COLORS.text}
+                />
+              </Pressable>
 
-            <Pressable onPress={handleOpenRequestClass} style={styles.requestButton}>
-              <Text style={styles.requestButtonText}>Request class in this area</Text>
-            </Pressable>
-          </View>
+{showCategoryMenu ? (
+  <Animated.View
+    style={[
+      styles.categoryMenuAnimated,
+      {
+        opacity: categoryMenuAnim,
+        transform: [
+          {
+            translateY: categoryMenuAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [-8, 0],
+            }),
+          },
+        ],
+      },
+    ]}
+  >
+    <View style={styles.categoryMenu}>
+      {categoryMenuItems.map((item, index) => {
+        const selected = selectedCategory === item.key;
+        const isLast = index === categoryMenuItems.length - 1;
 
-          <View style={styles.resultsPillWrap}>
-            <View style={styles.resultsPill}>
-              <Ionicons
-                name={visibleSessionCount > 0 ? "sparkles-outline" : "search-outline"}
-                size={14}
-                color={COLORS.text}
-              />
-              <Text style={styles.resultsPillText}>{foundCountLabel}</Text>
-            </View>
-          </View>
-
-          <Animated.View
-            pointerEvents={showCategoryMenu ? "auto" : "none"}
+        return (
+          <Pressable
+            key={item.key}
+            onPress={() => {
+              setSelectedCategory(item.key);
+              setShowCategoryMenu(false);
+            }}
             style={[
-              styles.categoryMenuAnimated,
-              {
-                opacity: categoryMenuAnim,
-                transform: [
-                  {
-                    translateY: categoryMenuAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-10, 0],
-                    }),
-                  },
-                  {
-                    scaleY: categoryMenuAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.96, 1],
-                    }),
-                  },
-                ],
-              },
+              styles.categoryMenuItem,
+              isLast && styles.categoryMenuItemLast,
             ]}
           >
-            {showCategoryMenu ? (
-              <View style={styles.categoryMenu}>
-                {categoryMenuItems.map((item, index) => {
-                  const selected = selectedCategory === item.key;
-                  const isLast = index === categoryMenuItems.length - 1;
+            <View style={styles.categoryMenuItemLeft}>
+              <CategoryMenuIcon category={item.markerCategory} />
+              <Text
+                style={[
+                  styles.categoryMenuItemText,
+                  selected && styles.categoryMenuItemTextSelected,
+                ]}
+              >
+                {item.label}
+              </Text>
+            </View>
 
-                  return (
-                    <Pressable
-                      key={item.key}
-                      onPress={() => {
-                        setSelectedCategory(item.key);
-                        setShowCategoryMenu(false);
-                      }}
-                      style={[
-                        styles.categoryMenuItem,
-                        isLast && styles.categoryMenuItemLast,
-                      ]}
-                    >
-                      <View style={styles.categoryMenuItemLeft}>
-                        <CategoryMenuIcon category={item.markerCategory} />
-                        <Text
-                          style={[
-                            styles.categoryMenuItemText,
-                            selected && styles.categoryMenuItemTextSelected,
-                          ]}
-                        >
-                          {item.label}
-                        </Text>
-                      </View>
-
-                      {selected ? (
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={18}
-                          color={COLORS.accent}
-                        />
-                      ) : (
-                        <View style={styles.categoryMenuSpacer} />
-                      )}
-                    </Pressable>
-                  );
-                })}
+            {selected ? (
+              <Ionicons name="checkmark" size={18} color={COLORS.accent} />
+            ) : (
+              <View style={styles.categoryMenuSpacer} />
+            )}
+          </Pressable>
+        );
+      })}
+    </View>
+  </Animated.View>
+) : null}
+              <View style={styles.resultsPill}>
+                <Ionicons
+                  name={visibleSessionCount > 0 ? "sparkles-outline" : "search-outline"}
+                  size={14}
+                  color={COLORS.text}
+                />
+                <Text style={styles.resultsPillText}>{foundCountLabel}</Text>
               </View>
-            ) : null}
-          </Animated.View>
+            </View>
+
+            <View style={styles.topColumnRight}>
+              <Pressable onPress={handleOpenRequestClass} style={styles.requestButton}>
+                <Ionicons name="trending-up-outline" size={16} color={COLORS.text} />
+                <Text style={styles.requestButtonText}>Request class in this area</Text>
+              </Pressable>
+
+              {shouldShowNoSessionsBanner ? (
+                <Animated.View
+                  style={[
+                    styles.topRightStatus,
+                    {
+                      opacity: emptyBannerOpacity,
+                      transform: [{ translateY: emptyBannerTranslateY }],
+                    },
+                  ]}
+                >
+                  <Ionicons name="location-outline" size={14} color="#FFFFFF" />
+                  <Text style={styles.topRightStatusText}>No sessions within 20 km</Text>
+
+                  <Pressable onPress={handleCloseNearbySuggestions}>
+                    <Ionicons name="close" size={14} color="#FFFFFF" />
+                  </Pressable>
+                </Animated.View>
+              ) : null}
+            </View>
+          </View>
 
           {showSearchThisArea ? (
             <Animated.View
@@ -1623,85 +1593,18 @@ export default function LearnerMap() {
               </Pressable>
             </Animated.View>
           ) : null}
-
-          {locError ? (
-            <View style={styles.infoPanel}>
-              <Text style={styles.infoPanelTitle}>Location</Text>
-              <Text style={styles.infoPanelBody}>{locError}</Text>
-            </View>
-          ) : null}
-
-          {showMapExplainCard ? (
-            <View style={styles.explainWrap}>
-              <ExplainCard
-                title="How discovery works"
-                body="Move the map, then tap Search this area to load classes there. If nothing fits, you can request a class in that area."
-                ctaText="Request class in this area"
-                onPressCta={handleOpenRequestClass}
-                dismissText="Got it"
-                onDismiss={handleDismissMapExplainCard}
-              />
-            </View>
-          ) : null}
-
-          {shouldShowNoSessionsBanner ? (
-            <Animated.View
-              style={[
-                styles.emptyFloating,
-                {
-                  opacity: emptyBannerOpacity,
-                  transform: [{ translateY: emptyBannerTranslateY }],
-                },
-              ]}
-            >
-              <Text style={styles.emptyFloatingText}>
-                No sessions within 20 km
-              </Text>
-
-              <Pressable onPress={handleCloseNearbySuggestions}>
-                <Ionicons name="close" size={16} color="#FFFFFF" />
-              </Pressable>
-            </Animated.View>
-          ) : null}
-
-          {shouldShowNearbyCompactList ? (
-            <View style={styles.nearbySuggestionsCompact}>
-              <Text style={styles.nearbySuggestionsTitle}>Closest nearby</Text>
-              {nearbySuggestions.map((item) => (
-                <Pressable
-                  key={item.session_id}
-                  onPress={() => handleFocusNearbySession(item)}
-                  style={styles.nearbyCompactCard}
-                >
-                  <Text style={styles.nearbyCompactTitle} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  <Text style={styles.nearbyCompactMeta} numberOfLines={1}>
-                    {item.teacher_name} · {formatDistance(item.distance_meters)}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
         </View>
 
-        {!isInitialLocationResolved ? (
-          <View style={styles.loadingBadge}>
-            <Text style={styles.loadingBadgeText}>Getting your location…</Text>
-          </View>
-        ) : isMapLoading ? (
+
+
+        {isMapLoading ? (
           <View style={styles.loadingBadge}>
             <Text style={styles.loadingBadgeText}>Loading…</Text>
           </View>
         ) : null}
 
         {userLocation ? (
-          <View
-            style={[
-              styles.recenterWrap,
-              { bottom: 88 + insets.bottom },
-            ]}
-          >
+          <View style={[styles.recenterWrap, { bottom: 88 + insets.bottom }]}>
             <Pressable onPress={handleRecenterToUser} style={styles.recenterButton}>
               <CurrentLocationIcon />
             </Pressable>
@@ -1718,7 +1621,68 @@ export default function LearnerMap() {
         />
       </View>
 
-      <View
+<Footer
+  unreadNotificationsCount={unreadNotificationsCount}
+  upcomingBookingsCount={upcomingBookingsCount}
+/>
+
+{showMapExplainCard ? (
+<Modal transparent visible={showMapExplainCard} animationType="fade">
+      <View style={styles.explainModalBackdrop}>
+      <View style={styles.explainModalCard}>
+        <ExplainCard
+          title="Explore classes near you"
+          body={
+            <View style={{ gap: 14 }}>
+              <View style={styles.explainRow}>
+                <View style={styles.explainIconCircle}>
+                  <Ionicons name="map-outline" size={22} color="#3F6AE0" />
+                </View>
+
+                <Text style={styles.explainText}>
+                  Use the map to find{" "}
+                  <Text style={styles.explainStrong}>nearby classes</Text>{" "}
+                  hosted by local teachers.
+                </Text>
+              </View>
+
+              <View style={styles.explainDivider} />
+
+              <View style={styles.explainRow}>
+                <View style={styles.explainIconCircle}>
+                  <Ionicons name="search-outline" size={22} color="#3F6AE0" />
+                </View>
+
+                <Text style={styles.explainText}>
+                  Move around the map, choose a category, then tap{" "}
+                  <Text style={styles.explainStrong}>Search this area</Text>{" "}
+                  to refresh results.
+                </Text>
+              </View>
+
+              <View style={styles.explainDivider} />
+
+              <View style={styles.explainRow}>
+                <View style={styles.explainIconCircle}>
+                  <Ionicons name="trending-up-outline" size={22} color="#3F6AE0" />
+                </View>
+
+                <Text style={styles.explainText}>
+                  If nothing is nearby, use{" "}
+                  <Text style={styles.explainStrong}>Request class in this area</Text>{" "}
+                  so teachers can see local demand.
+                </Text>
+              </View>
+            </View>
+          }
+          dismissText="Got it"
+          onDismiss={handleDismissMapExplainCard}
+      />
+      </View>
+    </View>
+  </Modal>
+) : null}
+      {/* <View
         style={[
           styles.footer,
           {
@@ -1728,11 +1692,11 @@ export default function LearnerMap() {
         ]}
       >
         <Pressable
-          onPress={() => router.push("/(learner)/notifications")}
+          onPress={() => safeReplace("/(learner)/notifications")}
           style={styles.footerItem}
         >
           <View style={styles.footerItemInner}>
-            <View style={styles.footerIconBadgeWrap}>
+            <View style={styles.footerIconWrap}>
               <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
               {unreadNotificationsCount > 0 ? (
                 <View style={styles.badge}>
@@ -1742,6 +1706,8 @@ export default function LearnerMap() {
                 </View>
               ) : null}
             </View>
+
+            <Text style={styles.footerLabel}>Notifications</Text>
           </View>
         </Pressable>
 
@@ -1749,7 +1715,7 @@ export default function LearnerMap() {
 
         <Pressable onPress={handleOpenTeach} style={styles.footerItem}>
           <View style={styles.footerItemInner}>
-            <Ionicons name="school-outline" size={24} color="#FFFFFF" />
+            <Ionicons name="school-outline" size={24} color="#ffffff" />
             <Text style={styles.footerLabel}>Teach</Text>
           </View>
         </Pressable>
@@ -1757,11 +1723,11 @@ export default function LearnerMap() {
         <View style={styles.footerDivider} />
 
         <Pressable
-          onPress={() => router.push("/(learner)/bookings")}
+          onPress={() => safeReplace("/(learner)/bookings")}
           style={styles.footerItem}
         >
           <View style={styles.footerItemInner}>
-            <View style={styles.footerScheduleWrap}>
+            <View style={styles.footerIconWrap}>
               <Ionicons name="calendar-outline" size={22} color="#FFFFFF" />
               {upcomingBookingsCount > 0 ? (
                 <View style={styles.footerMiniBadge}>
@@ -1774,7 +1740,7 @@ export default function LearnerMap() {
             <Text style={styles.footerLabel}>Bookings</Text>
           </View>
         </Pressable>
-      </View>
+      </View> */}
     </View>
   );
 }
@@ -1783,69 +1749,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: COLORS.bg,
-  },
-
-  header: {
-    borderBottomWidth: 1.2,
-    borderBottomColor: COLORS.borderStrong,
-    backgroundColor: COLORS.bg,
-    paddingTop: 0,
-    paddingHorizontal: 10,
-  },
-  headerRow: {
-    height: NAV_HEIGHT,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    position: "relative",
-  },
-  headerCenter: {
-    position: "absolute",
-    left: 64,
-    right: 64,
-    top: 0,
-    bottom: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  headerBrandText: {
-    color: COLORS.text,
-    fontSize: 21,
-    fontWeight: "900",
-    fontStyle: "italic",
-    includeFontPadding: false,
-    textAlignVertical: "center",
-    lineHeight: 22,
-  },
-  headerSideButton: {
-    width: NAV_HEIGHT,
-    height: NAV_HEIGHT,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  logoMiniWrap: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logoMiniBox: {
-    width: 22,
-    height: 28,
-    borderWidth: 1.2,
-    borderColor: "rgba(255,255,255,0.9)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 4,
-    backgroundColor: COLORS.surface,
-  },
-  logoMiniText: {
-    color: "rgba(255,255,255,0.96)",
-    fontSize: 10,
-    lineHeight: 10,
-    fontWeight: "900",
-    includeFontPadding: false,
   },
 
   mapFrame: {
@@ -1872,7 +1775,7 @@ const styles = StyleSheet.create({
   topActionsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 10,
     marginBottom: 8,
   },
@@ -1898,17 +1801,15 @@ const styles = StyleSheet.create({
   },
   requestButton: {
     minHeight: 42,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     borderRadius: 999,
     backgroundColor: COLORS.panelBg,
     borderWidth: 1,
     borderColor: COLORS.borderStrong,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
+    gap: 7,
   },
   requestButtonText: {
     color: COLORS.text,
@@ -1916,10 +1817,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  resultsPillWrap: {
-    alignItems: "flex-start",
-    marginBottom: 10,
-  },
   resultsPill: {
     minHeight: 34,
     paddingHorizontal: 12,
@@ -1935,6 +1832,7 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 13,
     fontWeight: "800",
+
   },
 
   categoryMenuAnimated: {
@@ -2038,19 +1936,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  emptyFloating: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "rgba(0,0,0,0.85)",
-    borderWidth: 1,
-    borderColor: COLORS.accentBorder,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    zIndex: 50,
-  },
+
   emptyFloatingText: {
     color: "#FFFFFF",
     fontSize: 13,
@@ -2205,6 +2091,14 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
   },
+mapLoadingOverlay: {
+  ...StyleSheet.absoluteFillObject,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: COLORS.bg,
+  zIndex: 1,
+  elevation: 1,
+},
   customMarkerPointer: {
     marginTop: -2,
     width: 0,
@@ -2217,88 +2111,88 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.surface,
   },
 
-  footer: {
-    borderTopWidth: 1.2,
-    borderTopColor: COLORS.borderStrong,
-    backgroundColor: COLORS.bg,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingBottom: 0,
-    paddingHorizontal: 8,
-  },
-  footerItem: {
+  topColumn: {
     flex: 1,
-    height: "100%",
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: "flex-start",
+    gap: 8,
   },
-  footerItemInner: {
-    minHeight: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  footerDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: "rgba(255,255,255,0.12)",
-  },
-  footerLabel: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
-    marginTop: 2,
-    includeFontPadding: false,
-  },
-  footerIconBadgeWrap: {
-    position: "relative",
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  footerScheduleWrap: {
-    position: "relative",
-    width: 34,
-    height: 34,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  footerMiniBadge: {
-    position: "absolute",
-    top: -6,
-    right: -14,
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 5,
-    borderRadius: 9,
-    backgroundColor: COLORS.badgeRed,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  footerMiniBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "900",
-  },
-  badge: {
-    position: "absolute",
-    top: -2,
-    right: -16,
-    minWidth: 26,
-    height: 26,
-    paddingHorizontal: 7,
-    borderRadius: 13,
-    backgroundColor: COLORS.badgeRed,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  badgeText: {
-    color: "#FFFFFF",
-    fontWeight: "900",
-    fontSize: 13,
-  },
+
+  
   divider: {
     backgroundColor: "rgba(255,255,255,0.06)",
+  },
+
+  topRightStatus: {
+    minHeight: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: COLORS.panelBg,
+    borderWidth: 1,
+    borderColor: COLORS.borderStrong,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+
+  topRightStatusText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  topColumnRight: {
+    flex: 1.25,
+    alignItems: "flex-end",
+    gap: 8,
+  },
+
+  explainModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.62)",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+
+  explainModalCard: {
+    width: "100%",
+  },
+
+  explainRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+
+  explainIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(111,146,255,0.13)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  explainText: {
+    flex: 1,
+    color: "#111827",
+    fontSize: 15,
+    lineHeight: 22,
+  },
+
+  explainStrong: {
+    color: "#3F6AE0",
+    fontWeight: "900",
+  },
+
+  explainDivider: {
+    height: 1,
+    backgroundColor: "rgba(0,0,0,0.08)",
+  },
+
+  loadingText: {
+    color: COLORS.textSoft,
+    fontSize: 14,
+    marginTop: 10,
   },
 });
