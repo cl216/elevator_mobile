@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { router } from "expo-router";
 import {
   ActivityIndicator,
   Alert,
@@ -24,23 +25,29 @@ import { AppScreen } from "@/src/components/ui/AppScreen";
 
 const COLORS = {
   bg: "#05070F",
-  surface: "#0D1424",
-  surfaceSoft: "#121A2C",
+
+  teacherPanel: "#1A0627",
+  teacherPanelSoft: "#250B38",
+  teacherPanelDeep: "#100018",
+
+  surface: "#170A24",
+  surfaceSoft: "#211033",
 
   text: "#F5F8FF",
-  textSoft: "rgba(222,230,247,0.72)",
-  textMuted: "rgba(222,230,247,0.52)",
+  textSoft: "rgba(235,220,255,0.76)",
+  textMuted: "rgba(235,220,255,0.54)",
 
-  border: "rgba(110,145,255,0.12)",
-  borderStrong: "rgba(110,145,255,0.28)",
+  border: "rgba(168,85,247,0.16)",
+  borderStrong: "rgba(168,85,247,0.42)",
 
-  accent: "#6F92FF",
-  accentSoft: "rgba(111,146,255,0.12)",
-  accentBorder: "rgba(111,146,255,0.25)",
+  accent: "#A855F7",
+  accentStrong: "#C084FC",
+  accentSoft: "rgba(168,85,247,0.16)",
+  accentBorder: "rgba(168,85,247,0.34)",
 
-  button: "#3F6AE0",
-  buttonPressed: "#355CC2",
-  buttonSecondary: "#121A2C",
+  button: "#7C3AED",
+  buttonPressed: "#6D28D9",
+  buttonSecondary: "#211033",
 
   successBg: "rgba(81, 207, 102, 0.12)",
   successBorder: "rgba(81, 207, 102, 0.22)",
@@ -54,9 +61,9 @@ const COLORS = {
   dangerBorder: "rgba(255, 107, 107, 0.22)",
   dangerText: "#FFA8A8",
 
-  infoBg: "rgba(111,146,255,0.12)",
-  infoBorder: "rgba(111,146,255,0.22)",
-  infoText: "#B7C7FF",
+  infoBg: "rgba(168,85,247,0.12)",
+  infoBorder: "rgba(168,85,247,0.22)",
+  infoText: "#E9D5FF",
 
   neutralBg: "rgba(255,255,255,0.05)",
   neutralBorder: "rgba(255,255,255,0.08)",
@@ -76,8 +83,9 @@ type TeacherSession = {
   title: string;
   category: string;
   bookings_count: string | number;
-  status?: "ACTIVE" | "CANCELLED" | string;
-  cancelled_at?: string | null;
+status?: "ACTIVE" | "CANCELLED" | string;
+review_status?: "PENDING_REVIEW" | "ACTIVE" | "REJECTED" | string;
+cancelled_at?: string | null;
 };
 
 function isPastSession(startTime: string) {
@@ -172,15 +180,15 @@ export default function TeacherSessionsScreen() {
         setStripeBlocked(false);
         setStripeBlockedMessage("");
 
-const data = await getMySessions();
-const rows = Array.isArray(data) ? data : [];
+        const data = await getMySessions();
+        const rows = Array.isArray(data) ? data : [];
 
-const normalizedSessions: TeacherSession[] = rows.map((item: any) => ({
-  ...item,
-  end_time: item.end_time ?? item.start_time,
-}));
+        const normalizedSessions: TeacherSession[] = rows.map((item: any) => ({
+          ...item,
+          end_time: item.end_time ?? item.start_time,
+        }));
 
-setSessions(normalizedSessions);
+        setSessions(normalizedSessions);
       } catch (e: any) {
         const message =
           e?.response?.data?.message ??
@@ -291,8 +299,10 @@ setSessions(normalizedSessions);
 
       await loadSessions();
 
-      Alert.alert("Session created", "A new copy of this session was created.");
-    } catch (e: any) {
+Alert.alert(
+  "Submitted for review",
+  "Your repeated session was submitted for approval before going live.",
+);    } catch (e: any) {
       const message =
         e?.response?.data?.message ??
         e?.message ??
@@ -393,8 +403,6 @@ setSessions(normalizedSessions);
     );
     const isBusy = busySessionId === session.id;
 
-console.log("OPEN SESSION CARD ID:", session.id, session);
-
     return (
       <SessionsCard
         key={session.id}
@@ -429,6 +437,13 @@ console.log("OPEN SESSION CARD ID:", session.id, session);
             ? ` · ${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
             : ""}
         </Text>
+        {session.review_status === "PENDING_REVIEW" ? (
+  <View style={styles.pendingReviewPill}>
+    <Text style={styles.pendingReviewPillText}>
+      Pending review
+    </Text>
+  </View>
+) : null}
 
         {section === "cancelled" ? (
           <View style={[styles.statusPill, styles.statusPillDanger]}>
@@ -462,7 +477,7 @@ console.log("OPEN SESSION CARD ID:", session.id, session);
               <>
                 <Pressable
                   onPress={() =>
-                     safePush(`/(teacher)/sessions/${session.id}/edit`)
+                    safePush(`/(teacher)/sessions/${session.id}/edit`)
                   }
                   style={({ pressed }) => [
                     styles.secondaryPill,
@@ -516,6 +531,9 @@ console.log("OPEN SESSION CARD ID:", session.id, session);
     );
   }
 
+
+
+
   const emptyState = useMemo(
     () => (
       <SessionsCard
@@ -532,6 +550,7 @@ console.log("OPEN SESSION CARD ID:", session.id, session);
         >
           <Text style={styles.primaryButtonText}>Create session</Text>
         </Pressable>
+        
       </SessionsCard>
     ),
     [],
@@ -548,18 +567,18 @@ console.log("OPEN SESSION CARD ID:", session.id, session);
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={() => loadSessions("refresh")}
-                tintColor="#FFFFFF"
+                tintColor={COLORS.accent}
               />
             }
           >
             <View style={styles.hero}>
               <View style={styles.heroBadge}>
-                <Text style={styles.heroBadgeText}>Sessions</Text>
+                <Text style={styles.heroBadgeText}>Teacher workspace</Text>
               </View>
 
               <View style={styles.heroHeaderRow}>
                 <View style={styles.heroTextWrap}>
-                  <Text style={styles.heroTitle}>My Sessions</Text>
+                  <Text style={styles.heroTitle}>My sessions</Text>
                   <Text style={styles.heroSubtitle}>
                     Create, repeat, and manage your bookable sessions.
                   </Text>
@@ -769,6 +788,7 @@ console.log("OPEN SESSION CARD ID:", session.id, session);
                     : cancelledSessions.map((session) =>
                         renderSessionCard(session, "cancelled"),
                       )}
+
                 </View>
               </>
             )}
@@ -778,6 +798,7 @@ console.log("OPEN SESSION CARD ID:", session.id, session);
     </AppLayout>
   );
 }
+
 
 const styles = StyleSheet.create({
   screen: {
@@ -797,19 +818,19 @@ const styles = StyleSheet.create({
 
   heroBadge: {
     alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: COLORS.accentSoft,
+    backgroundColor: COLORS.accent,
     borderWidth: 1,
-    borderColor: COLORS.accentBorder,
+    borderColor: COLORS.accentStrong,
     marginBottom: 12,
   },
 
   heroBadgeText: {
-    color: COLORS.text,
+    color: "#FFFFFF",
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   heroHeaderRow: {
@@ -826,7 +847,7 @@ const styles = StyleSheet.create({
   heroTitle: {
     color: COLORS.text,
     fontSize: 30,
-    fontWeight: "800",
+    fontWeight: "900",
     lineHeight: 34,
     marginBottom: 8,
   },
@@ -842,19 +863,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: COLORS.borderStrong,
-    backgroundColor: COLORS.surfaceSoft,
+    borderColor: COLORS.accentBorder,
+    backgroundColor: COLORS.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
 
   backButtonPressed: {
-    opacity: 0.86,
+    backgroundColor: "rgba(168,85,247,0.24)",
   },
 
   backButtonText: {
     color: COLORS.text,
-    fontWeight: "700",
+    fontWeight: "900",
   },
 
   sectionWrap: {
@@ -873,23 +894,26 @@ const styles = StyleSheet.create({
   },
 
   cardOuter: {
-    borderRadius: 24,
-    borderWidth: 1.2,
+    borderRadius: 26,
+    borderWidth: 1.4,
     borderColor: COLORS.borderStrong,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.teacherPanel,
     marginBottom: 14,
     overflow: "hidden",
   },
 
   cardOuterHighlight: {
-    borderColor: "rgba(111,146,255,0.36)",
+    borderColor: "rgba(192,132,252,0.58)",
+    backgroundColor: COLORS.teacherPanelSoft,
   },
 
   cardInner: {
     margin: 8,
     borderRadius: 18,
-    backgroundColor: COLORS.bg,
+    backgroundColor: COLORS.teacherPanelDeep,
     padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(168,85,247,0.12)",
   },
 
   cardHeaderRowShell: {
@@ -902,9 +926,9 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "rgba(111,146,255,0.18)",
+    backgroundColor: "rgba(168,85,247,0.22)",
     borderWidth: 1,
-    borderColor: "rgba(111,146,255,0.28)",
+    borderColor: "rgba(192,132,252,0.42)",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -925,7 +949,7 @@ const styles = StyleSheet.create({
   cardShellTitle: {
     color: COLORS.text,
     fontSize: 18,
-    fontWeight: "800",
+    fontWeight: "900",
     marginBottom: 4,
   },
 
@@ -938,7 +962,7 @@ const styles = StyleSheet.create({
   sessionMetaPrimary: {
     color: COLORS.text,
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "800",
     marginTop: -2,
     marginBottom: 8,
   },
@@ -953,7 +977,7 @@ const styles = StyleSheet.create({
   sessionStats: {
     color: COLORS.text,
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: "900",
     marginTop: 2,
   },
 
@@ -973,12 +997,29 @@ const styles = StyleSheet.create({
 
   statusPillText: {
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   statusPillTextDanger: {
     color: COLORS.dangerText,
   },
+
+  pendingReviewPill: {
+  alignSelf: "flex-start",
+  marginTop: 12,
+  borderWidth: 1,
+  borderColor: COLORS.warningBorder,
+  backgroundColor: COLORS.warningBg,
+  paddingHorizontal: 10,
+  paddingVertical: 6,
+  borderRadius: 999,
+},
+
+pendingReviewPillText: {
+  color: COLORS.warningText,
+  fontSize: 12,
+  fontWeight: "900",
+},
 
   cardFooter: {
     marginTop: 14,
@@ -1007,11 +1048,11 @@ const styles = StyleSheet.create({
 
   secondaryPill: {
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.accentBorder,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: COLORS.surfaceSoft,
+    backgroundColor: COLORS.accentSoft,
   },
 
   secondaryPillPressed: {
@@ -1020,7 +1061,7 @@ const styles = StyleSheet.create({
 
   secondaryPillText: {
     color: COLORS.text,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   dangerPill: {
@@ -1035,7 +1076,7 @@ const styles = StyleSheet.create({
 
   dangerPillText: {
     color: COLORS.dangerText,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   dangerPillTextDisabled: {
@@ -1045,9 +1086,9 @@ const styles = StyleSheet.create({
   primaryButton: {
     minHeight: 48,
     borderRadius: 16,
-    backgroundColor: "rgba(111,146,255,0.16)",
+    backgroundColor: COLORS.button,
     borderWidth: 1,
-    borderColor: "rgba(111,146,255,0.25)",
+    borderColor: COLORS.accentStrong,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
@@ -1055,22 +1096,23 @@ const styles = StyleSheet.create({
   },
 
   primaryButtonPressed: {
-    opacity: 0.86,
+    backgroundColor: COLORS.buttonPressed,
   },
 
   primaryButtonText: {
-    color: COLORS.text,
+    color: "#FFFFFF",
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
+  
   repeatPickerStack: {
     gap: 10,
   },
 
   repeatPickerCard: {
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.accentBorder,
     borderRadius: 14,
     padding: 12,
     backgroundColor: COLORS.surfaceSoft,
@@ -1078,7 +1120,7 @@ const styles = StyleSheet.create({
 
   repeatPickerLabel: {
     color: COLORS.text,
-    fontWeight: "700",
+    fontWeight: "900",
     marginBottom: 4,
   },
 

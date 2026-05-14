@@ -1,5 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
+import { autoCapitalize } from "@/src/utils/text";
 import {
     ActivityIndicator,
     Alert,
@@ -268,8 +269,10 @@ export default function LeaveReviewScreen() {
 
             <TextInput
               value={comment}
-              onChangeText={setComment}
-              placeholder="What did you enjoy? Anything future learners should know?"
+
+            onChangeText={setComment}
+          autoCapitalize="sentences"
+      placeholder="What did you enjoy? Anything future learners should know?"
               multiline
               maxLength={1000}
               style={{

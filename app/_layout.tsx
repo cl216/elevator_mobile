@@ -1,6 +1,6 @@
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import * as Notifications from "expo-notifications";
-import { Stack, useRouter } from "expo-router";
+import { Stack } from "expo-router";
 import { useEffect, useRef } from "react";
 import { AppState, AppStateStatus } from "react-native";
 import "react-native-gesture-handler";
@@ -9,6 +9,7 @@ import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import { AppToast } from "../src/components/ui/AppToast";
 import { authStore } from "../src/store/auth.store";
 import { registerPushToken } from "../src/utils/registerPushToken";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -20,7 +21,6 @@ Notifications.setNotificationHandler({
 });
 
 export default function RootLayout() {
-  const router = useRouter();
   const hasTriedPushRegistrationRef = useRef(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
@@ -110,7 +110,7 @@ export default function RootLayout() {
     return () => {
       subscription.remove();
     };
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     const handleNotificationNavigation = (data: any) => {
@@ -227,24 +227,26 @@ export default function RootLayout() {
       receivedSub.remove();
       responseSub.remove();
     };
-  }, [router]);
+  }, []);
 
   return (
   <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#000000" }}>
-    <BottomSheetModalProvider>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          animation: "slide_from_right",
-          gestureEnabled: true,
-          contentStyle: {
-            backgroundColor: "#000000",
-          },
-        }}
-      />
+    <SafeAreaProvider>
+      <BottomSheetModalProvider>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            animation: "slide_from_right",
+            gestureEnabled: true,
+            contentStyle: {
+              backgroundColor: "#000000",
+            },
+          }}
+        />
 
-      <AppToast />
-    </BottomSheetModalProvider>
+        <AppToast />
+      </BottomSheetModalProvider>
+    </SafeAreaProvider>
   </GestureHandlerRootView>
 );
 }

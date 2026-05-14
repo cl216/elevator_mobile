@@ -2,6 +2,10 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  getTeacherAttentionSummary,
+  type TeacherAttentionSummary,
+} from "@/src/api/teacherAttention";
+import {
   ActivityIndicator,
   Alert,
   Modal,
@@ -29,24 +33,40 @@ import { AppButton } from "@/src/components/ui/AppButton";
 import { AppScreen } from "@/src/components/ui/AppScreen";
 
 const COLORS = {
-  bg: "#05070F",
-  surface: "#0D1424",
-  surfaceSoft: "#121A2C",
+  bg: "#090313",
+  surface: "#2A1242",
+  surfaceSoft: "#35185A",
+  surfaceDeep: "#12071E",
 
-  text: "#F5F8FF",
-  textSoft: "rgba(222,230,247,0.72)",
-  textMuted: "rgba(222,230,247,0.52)",
+  text: "#FDF7FF",
+  textSoft: "rgba(245,230,255,0.76)",
+  textMuted: "rgba(245,230,255,0.52)",
 
-  border: "rgba(110,145,255,0.12)",
-  borderStrong: "rgba(110,145,255,0.28)",
+  border: "rgba(216,180,254,0.18)",
+  borderStrong: "rgba(216,180,254,0.42)",
 
-  accent: "#6F92FF",
-  accentSoft: "rgba(111,146,255,0.12)",
+  accent: "#C084FC",
+  accentStrong: "#A855F7",
+  accentSoft: "rgba(192,132,252,0.18)",
+  accentBorder: "rgba(216,180,254,0.38)",
 
-  success: "rgba(80, 200, 120, 0.18)",
-  warning: "rgba(255,255,255,0.10)",
+  button: "#9333EA",
+  buttonPressed: "#7E22CE",
+  buttonSecondary: "#35185A",
 
-  divider: "rgba(255,255,255,0.06)",
+  successBg: "rgba(34,197,94,0.14)",
+  successBorder: "rgba(34,197,94,0.28)",
+successText: "#8CE99A",
+
+  warningBg: "rgba(251,191,36,0.14)",
+  warningBorder: "rgba(251,191,36,0.28)",
+  warningText: "#FDE68A",
+
+  dangerBg: "rgba(248,113,113,0.14)",
+  dangerBorder: "rgba(248,113,113,0.28)",
+  dangerText: "#FCA5A5",
+
+  divider: "rgba(255,255,255,0.08)",
 };
 
 type StripeStatusResponse = {
@@ -106,6 +126,8 @@ function DashboardCard({
 
 export default function TeacherDashboard() {
   const [loading, setLoading] = useState(true);
+  const [attentionSummary, setAttentionSummary] =
+  useState<TeacherAttentionSummary | null>(null);
   const [stripeStatus, setStripeStatus] = useState<StripeStatusResponse | null>(
     null,
   );
@@ -122,10 +144,14 @@ export default function TeacherDashboard() {
       setLoading(true);
       setDashboardError(null);
 
-      const stripeRes = await api.get("/teacher/stripe/status");
-      setStripeStatus(stripeRes.data);
+const [stripeRes, demandRes, attentionRes] = await Promise.all([
+  api.get("/teacher/stripe/status"),
+  getNearbyTeacherDemand(),
+  getTeacherAttentionSummary(),
+]);
 
-      const demandRes = await getNearbyTeacherDemand();
+setStripeStatus(stripeRes.data);
+setAttentionSummary(attentionRes);
       setDemand({
         existing_categories: Array.isArray(demandRes.existing_categories)
           ? demandRes.existing_categories
@@ -159,17 +185,17 @@ export default function TeacherDashboard() {
     loadDashboard();
   }, [loadDashboard]);
 
-  // useEffect(() => {
-  //   (async () => {
-  //     const seen = await hasSeenExplainCard("teacher-dashboard-intro");
-  //     setShowTeacherExplainCard(!seen);
-  //   })();
-  // }, []);
+  useEffect(() => {
+    (async () => {
+      const seen = await hasSeenExplainCard("teacher-dashboard-intro");
+      setShowTeacherExplainCard(!seen);
+    })();
+  }, []);
 
    ////FOR TESTING EXPLAINCARD
-useEffect(() => {
-  setShowTeacherExplainCard(true);
-}, []);
+// useEffect(() => {
+//   setShowTeacherExplainCard(true);
+// }, []);
 
   const handleDeleteAccount = () => {
     Alert.alert(
@@ -273,13 +299,12 @@ useEffect(() => {
         >
           <View style={styles.hero}>
             <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>Teacher</Text>
+<Text style={styles.heroBadgeText}>Teacher mode</Text>
             </View>
 
             <Text style={styles.title}>Dashboard</Text>
             <Text style={styles.subtitle}>
-              Manage your sessions, payouts, profile, and local demand.
-            </Text>
+  Your teaching workspace for sessions, payouts, profile, and local demand.            </Text>
           </View>
 
           {loading ? (
@@ -296,53 +321,97 @@ useEffect(() => {
             </DashboardCard>
           ) : (
             <>
-              {showTeacherExplainCard ? (
-                <Modal transparent visible animationType="fade">
-                  <View style={styles.explainModalBackdrop}>
-                    <View style={styles.explainModalCard}>
-                      <ExplainCard
-                        title="Simple teaching flow"
-                        body={
-                          <View style={{ gap: 14 }}>
-                            <View style={styles.explainRow}>
-                              <View style={styles.explainIconCircle}>
-                                <Ionicons name="create-outline" size={22} color="#3F6AE0" />
-                              </View>
+{showTeacherExplainCard ? (
+  <Modal transparent visible animationType="fade">
+    <View style={styles.explainModalBackdrop}>
+      <View style={styles.teacherExplainCard}>
+        <View style={styles.teacherExplainTopIcon}>
+          <Ionicons name="map-outline" size={28} color={COLORS.accent} />
+        </View>
 
-                              <Text style={styles.explainText}>
-                                Create a session with{" "}
-                                <Text style={styles.explainStrong}>title, price, time</Text>,
-                                and location.
-                              </Text>
-                            </View>
+        <Text style={styles.teacherExplainTitle}>Simple teaching flow</Text>
 
-                            <View style={styles.explainDivider} />
+        <View style={styles.teacherExplainBody}>
+          <View style={styles.explainRow}>
+            <View style={styles.explainIconCircle}>
+              <Ionicons name="create-outline" size={22} color={COLORS.accent} />
+            </View>
 
-                            <View style={styles.explainRow}>
-                              <View style={styles.explainIconCircle}>
-                                <Ionicons name="calendar-outline" size={22} color="#3F6AE0" />
-                              </View>
+            <Text style={styles.explainText}>
+              Create a session with{" "}
+              <Text style={styles.explainStrong}>title, price, time</Text>, and
+              location.
+            </Text>
+          </View>
 
-                              <Text style={styles.explainText}>
-                                Learners only see{" "}
-                                <Text style={styles.explainStrong}>bookable sessions</Text>{" "}
-                                they can reserve in the app.
-                              </Text>
-                            </View>
-                          </View>
-                        }
-                        ctaText="Create session"
-                        onPressCta={() => {
-                          setShowTeacherExplainCard(false);
-                          safePush("/(teacher)/sessions/create");
-                        }}
-                        dismissText="Got it"
-                        onDismiss={handleDismissTeacherExplainCard}
-                      />
-                    </View>
-                  </View>
-                </Modal>
-              ) : null}
+          <View style={styles.explainDivider} />
+
+          <View style={styles.explainRow}>
+            <View style={styles.explainIconCircle}>
+              <Ionicons name="calendar-outline" size={22} color={COLORS.accent} />
+            </View>
+
+            <Text style={styles.explainText}>
+              Learners only see{" "}
+              <Text style={styles.explainStrong}>bookable sessions</Text> they
+              can reserve in the app.
+            </Text>
+          </View>
+        </View>
+
+        <Pressable
+          onPress={() => {
+            setShowTeacherExplainCard(false);
+            safePush("/(teacher)/sessions/create");
+          }}
+          style={styles.teacherExplainPrimaryButton}
+        >
+          <Text style={styles.teacherExplainPrimaryText}>Create session</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={handleDismissTeacherExplainCard}
+          style={styles.teacherExplainSecondaryButton}
+        >
+          <Text style={styles.teacherExplainSecondaryText}>Got it</Text>
+        </Pressable>
+      </View>
+    </View>
+  </Modal>
+) : null}
+
+<DashboardCard
+  icon="notifications-outline"
+  title="Needs attention"
+>
+  {attentionSummary?.items?.length ? (
+    <>
+      <Text style={styles.bodyText}>
+        You have{" "}
+        {attentionSummary.total_action_items} teaching item
+        {attentionSummary.total_action_items === 1 ? "" : "s"}{" "}
+        that may need review.
+      </Text>
+
+      <View style={styles.actionStack}>
+        {attentionSummary.items.map((item) => (
+          <AppButton
+            key={item.type}
+            title={`${item.count} • ${item.label}`}
+            onPress={() => safePush(item.route as any)}
+            variant="secondary"
+          />
+        ))}
+      </View>
+    </>
+  ) : (
+    <Text style={styles.bodyText}>
+      Nothing urgent right now. Private requests,
+      missing arrival instructions, and refund
+      issues will appear here.
+    </Text>
+  )}
+</DashboardCard>
 
               <DashboardCard icon="card-outline" title="Stripe payouts">
                 <Text style={styles.bodyText}>
@@ -550,16 +619,16 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
 
-  heroBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: "rgba(111,146,255,0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(111,146,255,0.25)",
-    marginBottom: 12,
-  },
+heroBadge: {
+  alignSelf: "flex-start",
+  paddingHorizontal: 12,
+  paddingVertical: 7,
+  borderRadius: 999,
+  backgroundColor: COLORS.accentSoft,
+  borderWidth: 1,
+  borderColor: COLORS.accentBorder,
+  marginBottom: 12,
+},
 
   heroBadgeText: {
     color: COLORS.text,
@@ -599,22 +668,21 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  cardOuter: {
-    borderRadius: 24,
-    borderWidth: 1.2,
-    borderColor: COLORS.borderStrong,
-    backgroundColor: COLORS.surface,
-    marginBottom: 14,
-    overflow: "hidden",
-  },
+cardOuter: {
+  borderRadius: 26,
+  borderWidth: 1.4,
+  borderColor: COLORS.borderStrong,
+  backgroundColor: COLORS.surface,
+  marginBottom: 16,
+  overflow: "hidden",
+},
 
-  cardInner: {
-    margin: 8,
-    borderRadius: 18,
-    backgroundColor: COLORS.bg,
-    overflow: "hidden",
-    padding: 16,
-  },
+cardInner: {
+  margin: 8,
+  borderRadius: 20,
+  backgroundColor: COLORS.surfaceDeep,
+  padding: 16,
+},
 
   cardHeaderRow: {
     flexDirection: "row",
@@ -622,17 +690,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  iconCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "rgba(111,146,255,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(111,146,255,0.28)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
+iconCircle: {
+  width: 42,
+  height: 42,
+  borderRadius: 21,
+  backgroundColor: "rgba(168,85,247,0.18)",
+  borderWidth: 1,
+  borderColor: "rgba(168,85,247,0.30)",
+  alignItems: "center",
+  justifyContent: "center",
+  marginRight: 12,
+},
 
   cardHeaderTextWrap: {
     flex: 1,
@@ -665,10 +733,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
 
-  metaBadgeSuccess: {
-    backgroundColor: COLORS.success,
-    borderColor: "rgba(80,200,120,0.28)",
-  },
+metaBadgeSuccess: {
+  backgroundColor: COLORS.successBg,
+  borderColor: COLORS.successBorder,
+},
 
   metaBadgeWarning: {
     backgroundColor: COLORS.accentSoft,
@@ -758,14 +826,19 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
 
-  explainIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "rgba(111,146,255,0.13)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+explainIconCircle: {
+  width: 38,
+  height: 38,
+  borderRadius: 19,
+  backgroundColor: "rgba(168,85,247,0.13)",
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+explainStrong: {
+  color: "#7E22CE",
+  fontWeight: "900",
+},
 
   explainText: {
     flex: 1,
@@ -774,13 +847,71 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
-  explainStrong: {
-    color: "#3F6AE0",
-    fontWeight: "900",
-  },
+
 
   explainDivider: {
     height: 1,
     backgroundColor: "rgba(0,0,0,0.08)",
   },
+  teacherExplainCard: {
+  width: "100%",
+  borderRadius: 24,
+  backgroundColor: "#F8F2FF",
+  padding: 18,
+  borderWidth: 1.5,
+  borderColor: "rgba(168,85,247,0.28)",
+},
+
+teacherExplainTopIcon: {
+  width: 50,
+  height: 50,
+  borderRadius: 25,
+  backgroundColor: "rgba(168,85,247,0.13)",
+  alignItems: "center",
+  justifyContent: "center",
+  marginBottom: 14,
+},
+
+teacherExplainTitle: {
+  color: "#1A0B2E",
+  fontSize: 22,
+  fontWeight: "900",
+  marginBottom: 16,
+},
+
+teacherExplainBody: {
+  gap: 14,
+  marginBottom: 18,
+},
+
+teacherExplainPrimaryButton: {
+  minHeight: 48,
+  borderRadius: 14,
+  backgroundColor: COLORS.accent,
+  alignItems: "center",
+  justifyContent: "center",
+  marginBottom: 10,
+},
+
+teacherExplainPrimaryText: {
+  color: "#FFFFFF",
+  fontSize: 15,
+  fontWeight: "900",
+},
+
+teacherExplainSecondaryButton: {
+  minHeight: 48,
+  borderRadius: 14,
+  backgroundColor: "rgba(168,85,247,0.13)",
+  borderWidth: 1,
+  borderColor: "rgba(168,85,247,0.24)",
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+teacherExplainSecondaryText: {
+  color: "#6B21A8",
+  fontSize: 15,
+  fontWeight: "900",
+},
 });

@@ -127,3 +127,21 @@ export async function getSessionBookings(sessionId: string) {
   const res = await api.get(`/teacher/sessions/${sessionId}/bookings`);
   return res.data;
 }
+  export async function getPendingReviewSessions() {
+  const res = await api.get("/sessions/admin/pending-review");
+  return res.data;
+}
+
+export async function approveSessionReview(sessionId: string) {
+  const res = await api.patch(`/sessions/admin/${sessionId}/approve`);
+  return res.data;
+}
+
+export async function rejectSessionReview(sessionId: string) {
+  const res = await api.patch(`/sessions/admin/${sessionId}/reject`);
+  return res.data;
+}
+export async function getMySessionById(sessionId: string) {
+  const res = await api.get(`/sessions/teacher/${sessionId}`);
+  return res.data as SessionDetail;
+}

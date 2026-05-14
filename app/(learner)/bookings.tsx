@@ -1,12 +1,20 @@
 import AppLayout from "@/src/components/layout/AppLayout";
 import { AppScreen } from "@/src/components/ui/AppScreen";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import * as Linking from "expo-linking";
+import { router, useFocusEffect } from "expo-router";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -14,13 +22,18 @@ import {
   Text,
   View,
 } from "react-native";
+import { SessionBottomSheet } from "../../src/components/session/sessionBottomSheet";
 
 import { api } from "../../src/api/client";
-import { ExplainCard } from "../../src/components/ui/ExplainCard";
 import {
-  hasSeenExplainCard,
-  markExplainCardSeen,
-} from "../../src/utils/explainCard";
+  createCheckoutSession,
+  syncCheckoutStatus,
+} from "../../src/api/payments";
+import {
+  getMyLearnerPrivateSessionRequests,
+  type PrivateSessionRequest,
+} from "@/src/api/privateSessionRequests";
+import { hasSeenExplainCard } from "../../src/utils/explainCard";
 
 const COLORS = {
   bg: "#05070F",
@@ -36,9 +49,6 @@ const COLORS = {
 
   accent: "#6F92FF",
   accentSoft: "rgba(111,146,255,0.12)",
-
-  button: "#3F6AE0",
-  buttonSecondary: "#121A2C",
 
   successBg: "rgba(81, 207, 102, 0.12)",
   successBorder: "rgba(81, 207, 102, 0.22)",
@@ -65,16 +75,7 @@ const COLORS = {
 
 type BookingRow = {
   booking_id: string;
-  booking_status:
-    | "PENDING"
-    | "CONFIRMED"
-    | "CANCELLED_BY_LEARNER"
-    | "CANCELLED_BY_TEACHER"
-    | "REFUND_PENDING"
-    | "REFUNDED"
-    | "REFUND_FAILED"
-    | "EXPIRED"
-    | string;
+  booking_status: string;
   booking_created_at: string;
   booking_confirmed_at?: string | null;
   booking_cancelled_at?: string | null;
@@ -86,6 +87,8 @@ type BookingRow = {
   session_max_participants: number;
   session_rough_location?: string | null;
   session_arrival_instructions?: string | null;
+  session_lat?: number | string | null;
+  session_lng?: number | string | null;
 
   class_title: string;
   class_category: string;
@@ -106,7 +109,10 @@ function getHoursUntil(dateString?: string) {
   if (!dateString) return null;
 
   const time = new Date(dateString).getTime();
-  if (Number.isNaN(time)) return null;
+
+  if (Number.isNaN(time)) {
+    return null;
+  }
 
   return (time - Date.now()) / (1000 * 60 * 60);
 }
@@ -118,10 +124,7 @@ function getApiErrorMessage(error: any, fallback: string): string {
     return responseData;
   }
 
-  if (
-    typeof responseData?.message === "string" &&
-    responseData.message.trim()
-  ) {
+  if (typeof responseData?.message === "string" && responseData.message.trim()) {
     return responseData.message;
   }
 
@@ -193,6 +196,7 @@ function getStatusStyles(status: string) {
         textColor: COLORS.successText,
       };
     case "PENDING":
+    case "REFUND_PENDING":
       return {
         backgroundColor: COLORS.warningBg,
         borderColor: COLORS.warningBorder,
@@ -204,12 +208,6 @@ function getStatusStyles(status: string) {
         backgroundColor: COLORS.dangerBg,
         borderColor: COLORS.dangerBorder,
         textColor: COLORS.dangerText,
-      };
-    case "REFUND_PENDING":
-      return {
-        backgroundColor: COLORS.warningBg,
-        borderColor: COLORS.warningBorder,
-        textColor: COLORS.warningText,
       };
     case "REFUNDED":
       return {
@@ -223,12 +221,6 @@ function getStatusStyles(status: string) {
         borderColor: "rgba(255, 146, 43, 0.22)",
         textColor: "#FFC078",
       };
-    case "EXPIRED":
-      return {
-        backgroundColor: COLORS.neutralBg,
-        borderColor: COLORS.neutralBorder,
-        textColor: COLORS.neutralText,
-      };
     default:
       return {
         backgroundColor: COLORS.neutralBg,
@@ -238,10 +230,26 @@ function getStatusStyles(status: string) {
   }
 }
 
+function isPendingBookingExpired(booking: BookingRow) {
+  if (booking.booking_status !== "PENDING") return false;
+
+  const createdAt = new Date(booking.booking_created_at).getTime();
+
+  if (Number.isNaN(createdAt)) {
+    return false;
+  }
+
+  return Date.now() > createdAt + 15 * 60 * 1000;
+}
+
 function getStatusDescription(booking: BookingRow) {
+  if (booking.booking_status === "PENDING" && isPendingBookingExpired(booking)) {
+    return "This booking looks expired because payment wasn’t completed in the app within 15 minutes. If you already paid in Stripe, tap Check payment status.";
+  }
+
   switch (booking.booking_status) {
     case "PENDING":
-      return "Complete payment to confirm your place.";
+      return "Complete payment to confirm your place. If you already paid, tap Check payment status.";
     case "CONFIRMED":
       return "Your place is confirmed.";
     case "CANCELLED_BY_LEARNER":
@@ -264,6 +272,10 @@ function getStatusDescription(booking: BookingRow) {
 }
 
 function getLearnerCancelRefundPreview(booking: BookingRow) {
+  if (booking.booking_status === "PENDING") {
+    return "This will cancel your pending booking. No payment has been confirmed yet, so no refund is needed.";
+  }
+
   const hoursUntilSession = getHoursUntil(booking.session_start_time);
 
   if (hoursUntilSession === null) {
@@ -281,13 +293,43 @@ function getLearnerCancelRefundPreview(booking: BookingRow) {
   return "This will cancel your confirmed booking. This cancellation is not eligible for an automatic refund because the session has already started.";
 }
 
+function openDirections(booking: BookingRow) {
+  const lat = Number(booking.session_lat);
+  const lng = Number(booking.session_lng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    Alert.alert(
+      "Directions unavailable",
+      "The exact map location is not available for this booking yet.",
+    );
+    return;
+  }
+
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=walking`;
+
+  Linking.openURL(url).catch(() => {
+    Alert.alert("Could not open maps", "Please try again.");
+  });
+}
+
 export default function LearnerBookingsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
+  const [privateRequests, setPrivateRequests] = useState<
+    PrivateSessionRequest[]
+  >([]);
   const [error, setError] = useState<string | null>(null);
-  const [showBookingsExplainCard, setShowBookingsExplainCard] = useState(true);
+  const [, setShowBookingsExplainCard] = useState(true);
+
+  const sessionSheetRef = useRef<any>(null);
+  const [sheetSessionId, setSheetSessionId] = useState<string | null>(null);
+
   const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(
+    null,
+  );
+  const [payingBookingId, setPayingBookingId] = useState<string | null>(null);
+  const [checkingBookingId, setCheckingBookingId] = useState<string | null>(
     null,
   );
 
@@ -301,14 +343,45 @@ export default function LearnerBookingsScreen() {
 
       setError(null);
 
-      const res = await api.get("/bookings/me");
-      const rows = Array.isArray(res?.data) ? res.data : [];
-      setBookings(rows);
+      const [bookingsRes, privateRows] = await Promise.all([
+        api.get("/bookings/me"),
+        getMyLearnerPrivateSessionRequests(),
+      ]);
+
+      const rows: BookingRow[] = Array.isArray(bookingsRes?.data)
+        ? bookingsRes.data
+        : [];
+
+      const syncedRows = await Promise.all(
+        rows.map(async (booking: BookingRow) => {
+          if (booking.booking_status === "PENDING") {
+            try {
+              const result = await syncCheckoutStatus(booking.booking_id);
+
+              if (result.status === "CONFIRMED") {
+                return {
+                  ...booking,
+                  booking_status: "CONFIRMED",
+                  booking_confirmed_at: new Date().toISOString(),
+                };
+              }
+            } catch (e) {
+              console.log("AUTO SYNC FAILED", e);
+            }
+          }
+
+          return booking;
+        }),
+      );
+
+      setBookings(syncedRows);
+      setPrivateRequests(Array.isArray(privateRows) ? privateRows : []);
     } catch (e: any) {
       const rawMessage = getApiErrorMessage(
         e,
         "Could not load your bookings.",
       );
+
       setError(normalizeBookingErrorMessage(String(rawMessage)));
     } finally {
       setLoading(false);
@@ -317,7 +390,25 @@ export default function LearnerBookingsScreen() {
   }
 
   useEffect(() => {
-    loadBookings();
+    void loadBookings();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadBookings(true);
+    }, []),
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void loadBookings(true);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -327,16 +418,104 @@ export default function LearnerBookingsScreen() {
     })();
   }, []);
 
-  const handleDismissBookingsExplainCard = useCallback(async () => {
-    await markExplainCardSeen("learner-bookings-intro");
-    setShowBookingsExplainCard(false);
+  const handleCompletePayment = useCallback(
+    async (booking: BookingRow) => {
+      if (!booking.booking_id || payingBookingId) return;
+
+      try {
+        setPayingBookingId(booking.booking_id);
+
+        const checkout = await createCheckoutSession(booking.booking_id);
+
+        if (!checkout?.checkoutUrl) {
+          throw new Error("Missing checkout URL");
+        }
+
+        await Linking.openURL(checkout.checkoutUrl);
+      } catch (e: any) {
+        const rawMessage = getApiErrorMessage(e, "Could not open checkout.");
+        const message = normalizeBookingErrorMessage(String(rawMessage));
+
+        Alert.alert("Payment error", message);
+      } finally {
+        setPayingBookingId(null);
+      }
+    },
+    [payingBookingId],
+  );
+
+  const handleCheckPaymentStatus = useCallback(
+    async (booking: BookingRow) => {
+      if (!booking.booking_id || checkingBookingId) return;
+
+      try {
+        setCheckingBookingId(booking.booking_id);
+
+        const result = await syncCheckoutStatus(booking.booking_id);
+
+        if (result.status === "CONFIRMED") {
+          Alert.alert("Payment confirmed", "Your booking is now confirmed.");
+          await loadBookings(true);
+          return;
+        }
+
+        Alert.alert(
+          "Still pending",
+          result.message ?? "Stripe has not confirmed this payment yet.",
+        );
+
+        await loadBookings(true);
+      } catch (e: any) {
+        const rawMessage = getApiErrorMessage(
+          e,
+          "Could not check payment status.",
+        );
+
+        Alert.alert("Payment check failed", String(rawMessage));
+      } finally {
+        setCheckingBookingId(null);
+      }
+    },
+    [checkingBookingId],
+  );
+
+  const handleOpenBooking = useCallback(
+    (booking: BookingRow) => {
+      if (
+        booking.booking_status === "PENDING" &&
+        !isPendingBookingExpired(booking)
+      ) {
+        void handleCompletePayment(booking);
+        return;
+      }
+
+      if (booking.session_id) {
+        setSheetSessionId(booking.session_id);
+
+        requestAnimationFrame(() => {
+          sessionSheetRef.current?.present?.();
+        });
+      }
+    },
+    [handleCompletePayment],
+  );
+
+  const handleOpenPrivateAcceptedSession = useCallback((sessionId: string) => {
+    setSheetSessionId(sessionId);
+
+    requestAnimationFrame(() => {
+      sessionSheetRef.current?.present?.();
+    });
   }, []);
 
   const handleCancelBooking = useCallback((booking: BookingRow) => {
     const previewMessage = getLearnerCancelRefundPreview(booking);
 
     Alert.alert("Cancel booking?", previewMessage, [
-      { text: "Keep booking", style: "cancel" },
+      {
+        text: "Keep booking",
+        style: "cancel",
+      },
       {
         text: "Cancel booking",
         style: "destructive",
@@ -348,9 +527,11 @@ export default function LearnerBookingsScreen() {
 
             const hoursUntilSession = getHoursUntil(booking.session_start_time);
             const successMessage =
-              hoursUntilSession !== null && hoursUntilSession >= 12
-                ? "Your booking has been cancelled. Your refund will be processed automatically."
-                : "Your booking has been cancelled.";
+              booking.booking_status === "PENDING"
+                ? "Your pending booking has been cancelled."
+                : hoursUntilSession !== null && hoursUntilSession >= 12
+                  ? "Your booking has been cancelled. Your refund will be processed automatically."
+                  : "Your booking has been cancelled.";
 
             Alert.alert("Booking cancelled", successMessage);
             await loadBookings(true);
@@ -360,6 +541,7 @@ export default function LearnerBookingsScreen() {
               "Could not cancel booking.",
             );
             const message = normalizeBookingErrorMessage(String(rawMessage));
+
             Alert.alert("Could not cancel booking", message);
           } finally {
             setCancellingBookingId(null);
@@ -369,12 +551,19 @@ export default function LearnerBookingsScreen() {
     ]);
   }, []);
 
+  const activePrivateRequests = useMemo(() => {
+    return privateRequests.filter((request: any) =>
+      ["OPEN", "ACCEPTED"].includes(request.status),
+    );
+  }, [privateRequests]);
+
   const upcomingBookings = useMemo(() => {
     return bookings
       .filter(
         (b) =>
           !!b.session_start_time &&
           !isPast(b.session_start_time) &&
+          !isPendingBookingExpired(b) &&
           b.booking_status !== "CANCELLED_BY_LEARNER" &&
           b.booking_status !== "CANCELLED_BY_TEACHER" &&
           b.booking_status !== "REFUNDED" &&
@@ -395,6 +584,7 @@ export default function LearnerBookingsScreen() {
         (b) =>
           !b.session_start_time ||
           isPast(b.session_start_time) ||
+          isPendingBookingExpired(b) ||
           b.booking_status === "CANCELLED_BY_LEARNER" ||
           b.booking_status === "CANCELLED_BY_TEACHER" ||
           b.booking_status === "REFUND_PENDING" ||
@@ -409,13 +599,15 @@ export default function LearnerBookingsScreen() {
         const bTime = b.session_start_time
           ? new Date(b.session_start_time).getTime()
           : 0;
+
         return bTime - aTime;
       });
   }, [bookings]);
 
   function canLearnerCancel(booking: BookingRow) {
     return (
-      booking.booking_status === "CONFIRMED" &&
+      ["CONFIRMED", "PENDING"].includes(booking.booking_status) &&
+      !isPendingBookingExpired(booking) &&
       !!booking.session_start_time &&
       !isPast(booking.session_start_time)
     );
@@ -429,21 +621,145 @@ export default function LearnerBookingsScreen() {
     );
   }
 
+  function hasActiveBookingForSession(sessionId?: string | null) {
+    if (!sessionId) return false;
+
+    return bookings.some(
+      (booking) =>
+        booking.session_id === sessionId &&
+        ["PENDING", "CONFIRMED"].includes(booking.booking_status) &&
+        !isPendingBookingExpired(booking),
+    );
+  }
+
+  function renderPrivateRequestCard(request: any) {
+    const acceptedSessionId = request.accepted_session_id;
+    const isAccepted = request.status === "ACCEPTED";
+    const alreadyHasBooking = hasActiveBookingForSession(
+      acceptedSessionId ? String(acceptedSessionId) : null,
+    );
+
+    return (
+      <View key={request.id} style={styles.cardOuter}>
+        <View style={styles.cardInner}>
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.cardHeaderTop}>
+              <Text style={styles.cardTitle}>Private 1:1 request</Text>
+
+              <Text style={styles.cardTeacher}>
+                {request.teacher?.first_name ||
+                  request.teacher?.full_name ||
+                  "Teacher"}
+              </Text>
+            </View>
+
+            <View
+              style={[
+                styles.statusPill,
+                {
+                  backgroundColor: isAccepted
+                    ? COLORS.successBg
+                    : COLORS.warningBg,
+                  borderColor: isAccepted
+                    ? COLORS.successBorder
+                    : COLORS.warningBorder,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusPillText,
+                  {
+                    color: isAccepted
+                      ? COLORS.successText
+                      : COLORS.warningText,
+                  },
+                ]}
+              >
+                {isAccepted ? "Ready to book" : "Awaiting teacher"}
+              </Text>
+            </View>
+          </View>
+
+          {request.message ? (
+            <Text style={styles.privateRequestMessage}>{request.message}</Text>
+          ) : null}
+
+          <View style={styles.infoBox}>
+            <Text style={styles.infoBoxText}>
+              {isAccepted
+                ? "Your teacher accepted this private request. Book the private session to confirm your place."
+                : "Your teacher has not accepted or declined this request yet."}
+            </Text>
+          </View>
+
+          {acceptedSessionId && !alreadyHasBooking ? (
+            <Pressable
+              onPress={() =>
+                handleOpenPrivateAcceptedSession(String(acceptedSessionId))
+              }
+              style={styles.primaryButton}
+            >
+              <Text style={styles.primaryButtonText}>Book private session</Text>
+            </Pressable>
+          ) : acceptedSessionId && alreadyHasBooking ? (
+            <View style={styles.infoBox}>
+              <Text style={styles.infoBoxText}>
+                You already have a booking in progress for this private session.
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    );
+  }
+
   function renderBookingCard(booking: BookingRow) {
-    const statusStyles = getStatusStyles(booking.booking_status);
+    const pendingExpired = isPendingBookingExpired(booking);
+    const effectiveStatus = pendingExpired ? "EXPIRED" : booking.booking_status;
+    const statusStyles = getStatusStyles(effectiveStatus);
+
     const showCancelButton = canLearnerCancel(booking);
     const showReviewButton = canLeaveReview(booking);
     const isCancelling = cancellingBookingId === booking.booking_id;
+    const isPaying = payingBookingId === booking.booking_id;
+    const isChecking = checkingBookingId === booking.booking_id;
     const statusDescription = getStatusDescription(booking);
+
+    const showPaymentButton =
+      booking.booking_status === "PENDING" && !pendingExpired;
+
+    const showCheckStatusButton = booking.booking_status === "PENDING";
+
+    const hasMeetingDetails =
+      booking.booking_status === "CONFIRMED" &&
+      !!(
+        booking.session_rough_location ||
+        booking.session_arrival_instructions ||
+        (Number.isFinite(Number(booking.session_lat)) &&
+          Number.isFinite(Number(booking.session_lng)))
+      );
+
+    const hasDirections =
+      booking.booking_status === "CONFIRMED" &&
+      Number.isFinite(Number(booking.session_lat)) &&
+      Number.isFinite(Number(booking.session_lng));
+
+      console.log(
+  "DIRECTIONS CHECK",
+  {
+    bookingId: booking.booking_id,
+    status: booking.booking_status,
+    lat: booking.session_lat,
+    lng: booking.session_lng,
+    hasDirections,
+  }
+);
 
     return (
       <Pressable
         key={booking.booking_id}
-        onPress={() => {
-          if (booking.booking_id) {
-             safePush(`/(learner)/booking/${booking.booking_id}`);
-          }
-        }}
+        onPress={() => handleOpenBooking(booking)}
         style={styles.cardOuter}
       >
         <View style={styles.cardInner}>
@@ -452,6 +768,7 @@ export default function LearnerBookingsScreen() {
               <Text style={styles.cardTitle}>
                 {booking.class_title || "Booked session"}
               </Text>
+
               <Text style={styles.cardTeacher}>
                 {booking.teacher_name || "Teacher"}
               </Text>
@@ -472,12 +789,16 @@ export default function LearnerBookingsScreen() {
                   { color: statusStyles.textColor },
                 ]}
               >
-                {statusLabel(booking.booking_status)}
+                {pendingExpired
+                  ? "Expired"
+                  : statusLabel(booking.booking_status)}
               </Text>
             </View>
           </View>
 
-          <Text style={styles.cardDate}>{formatDate(booking.session_start_time)}</Text>
+          <Text style={styles.cardDate}>
+            {formatDate(booking.session_start_time)}
+          </Text>
 
           <View style={styles.chipsRow}>
             <View style={styles.chip}>
@@ -499,13 +820,125 @@ export default function LearnerBookingsScreen() {
             </View>
           ) : null}
 
-          {showCancelButton || showReviewButton ? (
+          {hasMeetingDetails ? (
+            <View style={styles.meetingBox}>
+              <View style={styles.meetingHeaderRow}>
+                <Ionicons
+                  name="location-outline"
+                  size={18}
+                  color={COLORS.infoText}
+                />
+
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.meetingTitle}>Where to meet</Text>
+
+                  <Text style={styles.meetingSubtitle}>
+                    Important meetup details from the teacher
+                  </Text>
+                </View>
+              </View>
+
+              {booking.session_rough_location ? (
+                <View style={styles.meetingSection}>
+                  <Text style={styles.meetingLabel}>Location</Text>
+
+                  <Text style={styles.meetingText}>
+                    {booking.session_rough_location}
+                  </Text>
+                </View>
+              ) : null}
+
+              {booking.session_arrival_instructions ? (
+                <View style={styles.meetingSection}>
+                  <Text style={styles.meetingLabel}>Arrival instructions</Text>
+
+                  <Text style={styles.meetingText}>
+                    {booking.session_arrival_instructions}
+                  </Text>
+                </View>
+              ) : null}
+
+
+              {hasDirections ? (
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    openDirections(booking);
+                  }}
+                  style={styles.directionsButton}
+                >
+                  <Ionicons name="navigate-outline" size={17} color="#FFFFFF" />
+
+                  <Text style={styles.directionsButtonText}>
+                    Get directions
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
+
+          {showPaymentButton ||
+          showCheckStatusButton ||
+          showCancelButton ||
+          showReviewButton ? (
             <View style={styles.cardActions}>
+              {showPaymentButton ? (
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+
+                    if (!isPaying) {
+                      void handleCompletePayment(booking);
+                    }
+                  }}
+                  disabled={isPaying}
+                  style={[
+                    styles.paymentButton,
+                    isPaying && styles.paymentButtonDisabled,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.paymentButtonText,
+                      isPaying && styles.paymentButtonTextDisabled,
+                    ]}
+                  >
+                    {isPaying ? "Opening checkout..." : "Complete payment"}
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              {showCheckStatusButton ? (
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+
+                    if (!isChecking) {
+                      void handleCheckPaymentStatus(booking);
+                    }
+                  }}
+                  disabled={isChecking}
+                  style={[
+                    styles.secondaryButton,
+                    isChecking && styles.paymentButtonDisabled,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.secondaryButtonText,
+                      isChecking && styles.paymentButtonTextDisabled,
+                    ]}
+                  >
+                    {isChecking ? "Checking..." : "Check payment status"}
+                  </Text>
+                </Pressable>
+              ) : null}
+
               {showReviewButton ? (
                 <Pressable
                   onPress={(e) => {
                     e.stopPropagation();
-                     safePush(`/(learner)/review/${booking.booking_id}`);
+                    safePush(`/(learner)/review/${booking.booking_id}`);
                   }}
                   style={styles.secondaryButton}
                 >
@@ -517,6 +950,7 @@ export default function LearnerBookingsScreen() {
                 <Pressable
                   onPress={(e) => {
                     e.stopPropagation();
+
                     if (!isCancelling) {
                       handleCancelBooking(booking);
                     }
@@ -546,7 +980,14 @@ export default function LearnerBookingsScreen() {
             </Text>
 
             <View style={styles.openBookingWrap}>
-              <Text style={styles.openBookingText}>Open booking</Text>
+              <Text style={styles.openBookingText}>
+                {pendingExpired
+                  ? "View details"
+                  : booking.booking_status === "PENDING"
+                    ? "Complete payment"
+                    : "Open session"}
+              </Text>
+
               <Ionicons
                 name="chevron-forward"
                 size={16}
@@ -568,6 +1009,7 @@ export default function LearnerBookingsScreen() {
       <View style={styles.emptyOuter}>
         <View style={styles.emptyInner}>
           <Text style={styles.emptyTitle}>{title}</Text>
+
           <Text style={styles.emptySubtitle}>{subtitle}</Text>
 
           {showBrowse ? (
@@ -584,97 +1026,114 @@ export default function LearnerBookingsScreen() {
   }
 
   return (
-      <AppLayout>
-    <AppScreen>
-    <View style={styles.screen}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => loadBookings(true)}
-            tintColor="#FFFFFF"
-          />
-        }
-      >
-        <View style={styles.hero}>
-          <View style={styles.heroBadge}>
-            <Text style={styles.heroBadgeText}>Bookings</Text>
-          </View>
+    <AppLayout>
+      <AppScreen>
+        <View style={styles.screen}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => loadBookings(true)}
+                tintColor="#FFFFFF"
+              />
+            }
+          >
+            <View style={styles.hero}>
+              <View style={styles.heroBadge}>
+                <Text style={styles.heroBadgeText}>Bookings</Text>
+              </View>
 
-          <View style={styles.heroHeaderRow}>
-            <View style={styles.heroTextWrap}>
-              <Text style={styles.heroTitle}>My Bookings</Text>
-              <Text style={styles.heroSubtitle}>
-                See your upcoming and past classes.
-              </Text>
+              <View style={styles.heroHeaderRow}>
+                <View style={styles.heroTextWrap}>
+                  <Text style={styles.heroTitle}>My Bookings</Text>
+
+                  <Text style={styles.heroSubtitle}>
+                    See your upcoming classes, private requests, and past
+                    bookings.
+                  </Text>
+                </View>
+
+                <Pressable
+                  onPress={() => router.back()}
+                  style={styles.backButton}
+                >
+                  <Text style={styles.backButtonText}>Back</Text>
+                </Pressable>
+              </View>
             </View>
 
-            <Pressable onPress={() => router.back()} style={styles.backButton}>
-              <Text style={styles.backButtonText}>Back</Text>
-            </Pressable>
-          </View>
+            {loading ? (
+              <View style={styles.loadingState}>
+                <ActivityIndicator color={COLORS.accent} />
+
+                <Text style={styles.loadingStateText}>Loading bookings…</Text>
+              </View>
+            ) : error ? (
+              <View style={styles.errorOuter}>
+                <View style={styles.errorInner}>
+                  <Text style={styles.errorTitle}>Could not load bookings</Text>
+
+                  <Text style={styles.errorBody}>{error}</Text>
+
+                  <Pressable
+                    onPress={() => loadBookings()}
+                    style={styles.primaryButton}
+                  >
+                    <Text style={styles.primaryButtonText}>Try again</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <>
+                {activePrivateRequests.length > 0 ? (
+                  <View style={styles.sectionWrap}>
+                    <Text style={styles.sectionTitle}>
+                      Private 1:1 requests
+                    </Text>
+
+                    {activePrivateRequests.map(renderPrivateRequestCard)}
+                  </View>
+                ) : null}
+
+                <View style={styles.sectionWrap}>
+                  <Text style={styles.sectionTitle}>Upcoming</Text>
+
+                  {upcomingBookings.length === 0
+                    ? renderEmptyState(
+                        "No upcoming bookings",
+                        "You haven’t booked any upcoming sessions yet. Explore the map to find something nearby.",
+                        true,
+                      )
+                    : upcomingBookings.map(renderBookingCard)}
+                </View>
+
+                <View style={styles.sectionWrap}>
+                  <Text style={styles.sectionTitle}>Past & Cancelled</Text>
+
+                  {pastBookings.length === 0
+                    ? renderEmptyState(
+                        "Nothing here yet",
+                        "Your completed, cancelled, refunded, and refund-issue bookings will appear here.",
+                      )
+                    : pastBookings.map(renderBookingCard)}
+                </View>
+              </>
+            )}
+          </ScrollView>
         </View>
 
-        {/* {showBookingsExplainCard ? (
-          <ExplainCard
-            title="Your bookings live here"
-            body="Upcoming sessions stay at the top. Tap any booking to open the booking details. Past eligible classes can also be reviewed here."
-            ctaText="Browse classes"
-            onPressCta={() =>  safeReplace("/(learner)/map")}
-            dismissText="Got it"
-            onDismiss={handleDismissBookingsExplainCard}
-          />
-        ) : null} */}
-
-        {loading ? (
-          <View style={styles.loadingState}>
-            <ActivityIndicator color={COLORS.accent} />
-            <Text style={styles.loadingStateText}>Loading bookings…</Text>
-          </View>
-        ) : error ? (
-          <View style={styles.errorOuter}>
-            <View style={styles.errorInner}>
-              <Text style={styles.errorTitle}>Could not load bookings</Text>
-              <Text style={styles.errorBody}>{error}</Text>
-
-              <Pressable onPress={() => loadBookings()} style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>Try again</Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : (
-          <>
-            <View style={styles.sectionWrap}>
-              <Text style={styles.sectionTitle}>Upcoming</Text>
-
-              {upcomingBookings.length === 0
-                ? renderEmptyState(
-                    "No upcoming bookings",
-                    "You haven’t booked any upcoming sessions yet. Explore the map to find something nearby.",
-                    true,
-                  )
-                : upcomingBookings.map(renderBookingCard)}
-            </View>
-
-            <View style={styles.sectionWrap}>
-              <Text style={styles.sectionTitle}>Past & Cancelled</Text>
-
-              {pastBookings.length === 0
-                ? renderEmptyState(
-                    "Nothing here yet",
-                    "Your completed, cancelled, refunded, and refund-issue bookings will appear here.",
-                  )
-                : pastBookings.map(renderBookingCard)}
-            </View>
-          </>
-        )}
-      </ScrollView>
-    </View>
-
-    </AppScreen>
-  </AppLayout>
-);
+        <SessionBottomSheet
+          ref={sessionSheetRef}
+          sessionId={sheetSessionId}
+          visible={!!sheetSessionId}
+          onClose={() => {
+            setSheetSessionId(null);
+          }}
+        />
+      </AppScreen>
+    </AppLayout>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -682,12 +1141,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-scrollContent: {
-  paddingHorizontal: 20,
-  paddingTop: 24,
-  paddingBottom: 40,
-  flexGrow: 1,
-},
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
+    flexGrow: 1,
+  },
 
   hero: {
     marginBottom: 22,
@@ -789,6 +1248,70 @@ scrollContent: {
     marginBottom: 14,
   },
 
+  meetingBox: {
+    marginTop: 12,
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: COLORS.infoBg,
+    borderWidth: 1,
+    borderColor: COLORS.infoBorder,
+  },
+
+  meetingHeaderRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+
+  meetingTitle: {
+    color: COLORS.text,
+    fontWeight: "900",
+    fontSize: 15,
+  },
+
+  meetingSubtitle: {
+    color: COLORS.textMuted,
+    marginTop: 2,
+    fontSize: 12,
+  },
+
+  meetingSection: {
+    marginTop: 10,
+  },
+
+  meetingLabel: {
+    color: COLORS.infoText,
+    fontWeight: "800",
+    fontSize: 12,
+    marginBottom: 4,
+    textTransform: "uppercase",
+  },
+
+  meetingText: {
+    color: COLORS.text,
+    lineHeight: 20,
+  },
+
+  directionsButton: {
+    marginTop: 14,
+    minHeight: 46,
+    borderRadius: 14,
+    backgroundColor: COLORS.accent,
+    borderWidth: 1,
+    borderColor: COLORS.borderStrong,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+
+  directionsButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 14,
+  },
+
   sectionWrap: {
     marginBottom: 28,
   },
@@ -837,6 +1360,12 @@ scrollContent: {
   cardTeacher: {
     marginTop: 6,
     color: COLORS.textSoft,
+  },
+
+  privateRequestMessage: {
+    marginTop: 12,
+    color: COLORS.textSoft,
+    lineHeight: 20,
   },
 
   statusPill: {
@@ -928,6 +1457,29 @@ scrollContent: {
     color: COLORS.text,
     fontSize: 15,
     fontWeight: "800",
+  },
+
+  paymentButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBg,
+  },
+
+  paymentButtonDisabled: {
+    backgroundColor: COLORS.surfaceSoft,
+    borderColor: COLORS.border,
+  },
+
+  paymentButtonText: {
+    fontWeight: "900",
+    color: COLORS.warningText,
+  },
+
+  paymentButtonTextDisabled: {
+    color: COLORS.textMuted,
   },
 
   secondaryButton: {

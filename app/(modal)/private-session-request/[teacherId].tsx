@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
+import { autoCapitalize } from "@/src/utils/text";
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +13,7 @@ import {
   View,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createPrivateSessionRequest } from "@/src/api/privateSessionRequests";
 
 const COLORS = {
@@ -68,9 +69,14 @@ function PickerField({
 }) {
   return (
     <Pressable onPress={onPress} style={styles.pickerCard}>
+      <View style={styles.pickerIconCircle}>
+        <Text style={styles.pickerIconText}>✎</Text>
+      </View>
+
       <View style={{ flex: 1 }}>
         <Text style={styles.pickerLabel}>{label}</Text>
         <Text style={styles.pickerValue}>{value}</Text>
+        <Text style={styles.pickerHint}>Tap to change this time</Text>
       </View>
 
       {removable && onClear ? (
@@ -89,6 +95,9 @@ function PickerField({
 }
 
 export default function PrivateSessionRequestScreen() {
+
+  const insets = useSafeAreaInsets();
+
   const params = useLocalSearchParams<{
     teacherId?: string;
     teacherName?: string;
@@ -234,10 +243,13 @@ export default function PrivateSessionRequestScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
+    <ScrollView
+  contentContainerStyle={[
+    styles.content,
+    { paddingTop: Math.max(24, insets.top + 18) },
+  ]}
+  showsVerticalScrollIndicator={false}
+>
         <View style={styles.hero}>
           <View style={styles.heroTopRow}>
             <View style={styles.heroTextWrap}>
@@ -271,8 +283,9 @@ export default function PrivateSessionRequestScreen() {
             <Text style={styles.label}>Message</Text>
             <TextInput
               value={message}
-              onChangeText={setMessage}
-              placeholder="What do you want help with?"
+          onChangeText={setMessage}
+          autoCapitalize="sentences"
+                      placeholder="What do you want help with?"
               placeholderTextColor={COLORS.textMuted}
               multiline
               style={styles.textArea}
@@ -296,8 +309,9 @@ export default function PrivateSessionRequestScreen() {
             <Text style={styles.label}>Extra note</Text>
             <TextInput
               value={learnerNote}
-              onChangeText={setLearnerNote}
-              placeholder="Anything helpful for the teacher to know"
+          onChangeText={setLearnerNote}
+          autoCapitalize="sentences"
+            placeholder="Anything helpful for the teacher to know"
               placeholderTextColor={COLORS.textMuted}
               multiline
               style={styles.textAreaSmall}
@@ -308,9 +322,9 @@ export default function PrivateSessionRequestScreen() {
         <View style={styles.cardOuter}>
           <View style={styles.cardInner}>
             <Text style={styles.sectionTitle}>Suggested dates and times</Text>
-            <Text style={styles.sectionSubtitle}>
-              Pick 1 to 3 options. The teacher can choose one that works best.
-            </Text>
+<Text style={styles.sectionSubtitle}>
+  We’ve suggested 2 times to make this quicker. Tap any option to change it, or add a third time.
+</Text>
 
             <View style={styles.pickerStack}>
               <PickerField
@@ -344,22 +358,21 @@ export default function PrivateSessionRequestScreen() {
                   style={styles.addSuggestionButton}
                 >
                   <Text style={styles.addSuggestionButtonText}>
-                    + Add a third suggestion
-                  </Text>
++ Add another time option                  </Text>
                 </Pressable>
               )}
             </View>
           </View>
         </View>
 
-        <View style={styles.noticeBox}>
-          <Text style={styles.noticeTitle}>How this works</Text>
-          <Text style={styles.noticeText}>
-            This does not start a chat. The teacher reviews your request and can
-            accept or decline it. If accepted, they create a paid private
-            session for you to book normally in the app.
-          </Text>
-        </View>
+<View style={styles.noticeBox}>
+  <Text style={styles.noticeTitle}>How this works</Text>
+  <Text style={styles.noticeText}>
+    This does not start a chat. The teacher reviews your request and can
+    accept or decline it. If accepted, they’ll create a private 1:1 session
+    just for you, which you can then book securely through the app.
+  </Text>
+</View>
 
         <View style={styles.actions}>
           <Pressable
@@ -440,9 +453,32 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
   },
 
+  pickerIconCircle: {
+  width: 34,
+  height: 34,
+  borderRadius: 17,
+  backgroundColor: COLORS.accentSoft,
+  borderWidth: 1,
+  borderColor: COLORS.accentBorder,
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+pickerIconText: {
+  color: COLORS.text,
+  fontSize: 15,
+  fontWeight: "900",
+},
+
+pickerHint: {
+  color: COLORS.accent,
+  fontSize: 12,
+  fontWeight: "800",
+  marginTop: 5,
+},
+
   content: {
     paddingHorizontal: 20,
-    paddingTop: 24,
     paddingBottom: 40,
   },
 

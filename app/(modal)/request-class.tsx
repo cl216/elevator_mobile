@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
+import { autoCapitalize } from "@/src/utils/text";
 import {
   Alert,
   ActivityIndicator,
@@ -18,7 +19,6 @@ import {
 } from "../../src/api/categories";
 
 import AppLayout from "@/src/components/layout/AppLayout";
-import { AppScreen } from "@/src/components/ui/AppScreen";
 
 type RequestType = "existing_category" | "new_class";
 
@@ -54,27 +54,35 @@ export default function RequestClassScreen() {
 
   const [requestType, setRequestType] =
     useState<RequestType>("existing_category");
+
   const [approvedCategories, setApprovedCategories] = useState<
     ApprovedCategory[]
   >([]);
-  const [loadingCategories, setLoadingCategories] = useState(true);
 
+  const [loadingCategories, setLoadingCategories] = useState(true);
   const [category, setCategory] = useState(params.category ?? "");
   const [customTitle, setCustomTitle] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    (async () => {
+    let alive = true;
+
+    async function loadCategories() {
       try {
         setLoadingCategories(true);
+
         const rows = await getApprovedCategories();
+
+        if (!alive) return;
+
         setApprovedCategories(rows);
 
         if (!category) {
           setCategory(rows[0]?.slug ?? "");
         } else {
           const exists = rows.some((row) => row.slug === category);
+
           if (!exists) {
             setCategory(rows[0]?.slug ?? "");
           }
@@ -90,9 +98,17 @@ export default function RequestClassScreen() {
           Array.isArray(message) ? message.join("\n") : String(message),
         );
       } finally {
-        setLoadingCategories(false);
+        if (alive) {
+          setLoadingCategories(false);
+        }
       }
-    })();
+    }
+
+    loadCategories();
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
   async function handleSubmit() {
@@ -157,178 +173,188 @@ export default function RequestClassScreen() {
 
   return (
     <AppLayout>
-      <AppScreen>
+      <View style={styles.root}>
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.screen}>
-            <View style={styles.hero}>
-              <View style={styles.heroBadge}>
-                <Text style={styles.heroBadgeText}>Request a class</Text>
-              </View>
-
-              <Text style={styles.title}>Tell us what you want nearby</Text>
-              <Text style={styles.subtitle}>
-                Ask for an existing category or suggest a brand new class idea
-                for this area.
-              </Text>
+          <View style={styles.hero}>
+            <View style={styles.heroBadge}>
+              <Text style={styles.heroBadgeText}>Request a class</Text>
             </View>
 
-            <View style={styles.cardOuter}>
-              <View style={styles.cardInner}>
-                <Text style={styles.sectionTitle}>Request type</Text>
+            <Text style={styles.title}>Tell us what you want nearby</Text>
 
-                <View style={styles.optionList}>
-                  <Pressable
-                    onPress={() => setRequestType("existing_category")}
-                    style={[
-                      styles.optionCard,
-                      requestType === "existing_category" &&
-                        styles.optionCardSelected,
-                    ]}
-                  >
-                    <Text style={styles.optionTitle}>
-                      Request an existing category
-                    </Text>
-                    <Text style={styles.optionBody}>
-                      Choose from categories already supported in the app.
-                    </Text>
-                  </Pressable>
+            <Text style={styles.subtitle}>
+              Ask for an existing category or suggest a brand new class idea for
+              this area.
+            </Text>
+          </View>
 
-                  <Pressable
-                    onPress={() => setRequestType("new_class")}
-                    style={[
-                      styles.optionCard,
-                      requestType === "new_class" && styles.optionCardSelected,
-                    ]}
-                  >
-                    <Text style={styles.optionTitle}>
-                      Suggest a new class idea
-                    </Text>
-                    <Text style={styles.optionBody}>
-                      Share something new that is not listed yet.
-                    </Text>
-                  </Pressable>
-                </View>
+          <View style={styles.cardOuter}>
+            <View style={styles.cardInner}>
+              <Text style={styles.sectionTitle}>Request type</Text>
+
+              <View style={styles.optionList}>
+                <Pressable
+                  onPress={() => setRequestType("existing_category")}
+                  style={[
+                    styles.optionCard,
+                    requestType === "existing_category" &&
+                      styles.optionCardSelected,
+                  ]}
+                >
+                  <Text style={styles.optionTitle}>
+                    Request an existing category
+                  </Text>
+
+                  <Text style={styles.optionBody}>
+                    Choose from categories already supported in the app.
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setRequestType("new_class")}
+                  style={[
+                    styles.optionCard,
+                    requestType === "new_class" && styles.optionCardSelected,
+                  ]}
+                >
+                  <Text style={styles.optionTitle}>
+                    Suggest a new class idea
+                  </Text>
+
+                  <Text style={styles.optionBody}>
+                    Share something new that is not listed yet.
+                  </Text>
+                </Pressable>
               </View>
             </View>
+          </View>
 
-            {requestType === "existing_category" ? (
-              <View style={styles.cardOuter}>
-                <View style={styles.cardInner}>
-                  <Text style={styles.sectionTitle}>Choose a category</Text>
-
-                  {loadingCategories ? (
-                    <View style={styles.loadingWrap}>
-                      <ActivityIndicator color={COLORS.accent} />
-                      <Text style={styles.loadingText}>
-                        Loading categories…
-                      </Text>
-                    </View>
-                  ) : approvedCategories.length === 0 ? (
-                    <Text style={styles.bodyText}>
-                      No approved categories are available yet.
-                    </Text>
-                  ) : (
-                    <View style={styles.optionList}>
-                      {approvedCategories.map((item) => {
-                        const selected = category === item.slug;
-
-                        return (
-                          <Pressable
-                            key={item.id}
-                            onPress={() => setCategory(item.slug)}
-                            style={[
-                              styles.optionCard,
-                              selected && styles.optionCardSelected,
-                            ]}
-                          >
-                            <Text style={styles.optionTitle}>{item.label}</Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  )}
-                </View>
-              </View>
-            ) : (
-              <View style={styles.cardOuter}>
-                <View style={styles.cardInner}>
-                  <Text style={styles.sectionTitle}>New class idea</Text>
-                  <TextInput
-                    value={customTitle}
-                    onChangeText={setCustomTitle}
-                    placeholder="Example: Fishing, Gaming, Gardening"
-                    placeholderTextColor={COLORS.textMuted}
-                    maxLength={80}
-                    style={styles.input}
-                  />
-                </View>
-              </View>
-            )}
-
+          {requestType === "existing_category" ? (
             <View style={styles.cardOuter}>
               <View style={styles.cardInner}>
-                <Text style={styles.sectionTitle}>Optional note</Text>
-                <Text style={styles.helperText}>
-                  Add any preferences, level, or timing that could help teachers.
-                </Text>
+                <Text style={styles.sectionTitle}>Choose a category</Text>
+
+                {loadingCategories ? (
+                  <View style={styles.loadingWrap}>
+                    <ActivityIndicator color={COLORS.accent} />
+
+                    <Text style={styles.loadingText}>
+                      Loading categories…
+                    </Text>
+                  </View>
+                ) : approvedCategories.length === 0 ? (
+                  <Text style={styles.bodyText}>
+                    No approved categories are available yet.
+                  </Text>
+                ) : (
+                  <View style={styles.optionList}>
+                    {approvedCategories.map((item) => {
+                      const selected = category === item.slug;
+
+                      return (
+                        <Pressable
+                          key={item.id}
+                          onPress={() => setCategory(item.slug)}
+                          style={[
+                            styles.optionCard,
+                            selected && styles.optionCardSelected,
+                          ]}
+                        >
+                          <Text style={styles.optionTitle}>{item.label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            </View>
+          ) : (
+            <View style={styles.cardOuter}>
+              <View style={styles.cardInner}>
+                <Text style={styles.sectionTitle}>New class idea</Text>
+
                 <TextInput
-                  value={note}
-                  onChangeText={setNote}
-                  placeholder="Example: Beginner-friendly evening class"
+                  value={customTitle}
+                            onChangeText={setCustomTitle}
+                  autoCapitalize="words"
+                  placeholder="Example: Fishing, Gaming, Gardening"
                   placeholderTextColor={COLORS.textMuted}
-                  multiline
-                  maxLength={300}
-                  style={styles.textArea}
+                  maxLength={80}
+                  style={styles.input}
                 />
               </View>
             </View>
+          )}
 
-            <Pressable
-              onPress={handleSubmit}
-              disabled={saving}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                pressed && !saving && styles.primaryButtonPressed,
-                saving && styles.primaryButtonDisabled,
-              ]}
-            >
-              <Text style={styles.primaryButtonText}>
-                {saving ? "Sending..." : "Send request"}
+          <View style={styles.cardOuter}>
+            <View style={styles.cardInner}>
+              <Text style={styles.sectionTitle}>Optional note</Text>
+
+              <Text style={styles.helperText}>
+                Add any preferences, level, or timing that could help teachers.
               </Text>
-            </Pressable>
 
-            <Pressable
-              onPress={() => router.back()}
-              style={({ pressed }) => [
-                styles.secondaryButton,
-                pressed && styles.secondaryButtonPressed,
-              ]}
-            >
-              <Text style={styles.secondaryButtonText}>Cancel</Text>
-            </Pressable>
+              <TextInput
+                value={note}
+                          onChangeText={setNote}
+                autoCapitalize="sentences"
+                placeholder="Example: Beginner-friendly evening class"
+                placeholderTextColor={COLORS.textMuted}
+                multiline
+                maxLength={300}
+                style={styles.textArea}
+              />
+            </View>
           </View>
+
+          <Pressable
+            onPress={handleSubmit}
+            disabled={saving}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && !saving && styles.primaryButtonPressed,
+              saving && styles.primaryButtonDisabled,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>
+              {saving ? "Sending..." : "Send request"}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.back()}
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              pressed && styles.secondaryButtonPressed,
+            ]}
+          >
+            <Text style={styles.secondaryButtonText}>Cancel</Text>
+          </Pressable>
         </ScrollView>
-      </AppScreen>
+      </View>
     </AppLayout>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: COLORS.bg,
+  },
+
   scroll: {
     flex: 1,
     backgroundColor: COLORS.bg,
   },
 
   content: {
-    paddingBottom: 18,
-  },
-
-  screen: {
-    paddingBottom: 18,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 32,
   },
 
   hero: {

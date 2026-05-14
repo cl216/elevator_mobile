@@ -1,36 +1,34 @@
 import { Ionicons } from "@expo/vector-icons";
 import {
-    BottomSheetBackdrop,
-    BottomSheetModal,
-    BottomSheetScrollView,
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
 import React, {
-    forwardRef,
-    useEffect,
-    useImperativeHandle,
-    useMemo,
-    useRef,
-    useState,
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
 import {
-    ActivityIndicator,
-    Dimensions,
-    Image,
-    LayoutChangeEvent,
-    Modal,
-    NativeScrollEvent,
-    NativeSyntheticEvent,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
-import { safePush, safeReplace } from "@/src/utils/safeRouter";
-
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { TeacherProfileBottomSheet } from "@/src/components/teacher/TeacherProfileBottomSheet";
 import { API_BASE_URL } from "@/src/config/api";
+import { mediaUrl } from "@/src/utils/mediaUrl";
+import { safePush } from "@/src/utils/safeRouter";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -102,6 +100,7 @@ type Props = {
 
 function formatDate(dateString?: string) {
   if (!dateString) return "TBC";
+
   return new Date(dateString).toLocaleDateString([], {
     weekday: "short",
     month: "short",
@@ -119,6 +118,7 @@ function formatTimeRange(dateString?: string, durationMinutes?: number) {
     hour: "numeric",
     minute: "2-digit",
   });
+
   const endLabel = end.toLocaleTimeString([], {
     hour: "numeric",
     minute: "2-digit",
@@ -189,18 +189,25 @@ function buildAttendanceLabel(session: SessionDetail | null) {
 export const SessionBottomSheet = forwardRef<any, Props>(
   function SessionBottomSheet({ sessionId, visible, onClose }, ref) {
     const insets = useSafeAreaInsets();
+
     const modalRef = useRef<BottomSheetModal | null>(null);
-    const heroScrollRef = useRef<ScrollView | null>(null);
+    const teacherSheetRef = useRef<any>(null);
     const viewerScrollRef = useRef<ScrollView | null>(null);
 
-    const [heroWidth, setHeroWidth] = useState(0);
+    const openingTeacherRef = useRef(false);
+    const sessionDismissedForTeacherRef = useRef(false);
+    const navigatingAwayFromTeacherRef = useRef(false);
+
     const [session, setSession] = useState<SessionDetail | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [currentIndex, setCurrentIndex] = useState(0);
 
     const [viewerVisible, setViewerVisible] = useState(false);
     const [viewerIndex, setViewerIndex] = useState(0);
+
+    const [teacherProfileId, setTeacherProfileId] = useState<string | null>(
+      null,
+    );
 
     useImperativeHandle(ref, () => ({
       present: () => modalRef.current?.present(),
@@ -216,13 +223,13 @@ export const SessionBottomSheet = forwardRef<any, Props>(
         setSession(null);
         setLoading(false);
         setError(null);
-        setCurrentIndex(0);
         setViewerVisible(false);
         setViewerIndex(0);
+        setTeacherProfileId(null);
         return;
       }
 
-      (async () => {
+      async function loadSession() {
         try {
           setLoading(true);
           setError(null);
@@ -231,10 +238,10 @@ export const SessionBottomSheet = forwardRef<any, Props>(
           if (!res.ok) throw new Error("Failed to load session");
 
           const data = (await res.json()) as SessionDetail;
+
           if (!alive) return;
 
           setSession(data);
-          setCurrentIndex(0);
         } catch (e: any) {
           if (!alive) return;
           setError(e?.message ?? "Failed to load session");
@@ -242,7 +249,9 @@ export const SessionBottomSheet = forwardRef<any, Props>(
           if (!alive) return;
           setLoading(false);
         }
-      })();
+      }
+
+      loadSession();
 
       return () => {
         alive = false;
@@ -251,9 +260,9 @@ export const SessionBottomSheet = forwardRef<any, Props>(
 
     const images = useMemo<string[]>(() => {
       return (
-        session?.image_urls?.filter(
-          (u: string) => typeof u === "string" && u.trim().length > 0,
-        ) ?? []
+        (session?.image_urls
+          ?.map((u) => mediaUrl(u))
+          .filter(Boolean) as string[]) ?? []
       ).slice(0, 3);
     }, [session]);
 
@@ -266,12 +275,6 @@ export const SessionBottomSheet = forwardRef<any, Props>(
 
     const teacherId = session?.teacher?.id ?? null;
 
-    const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (!heroWidth) return;
-      const index = Math.round(e.nativeEvent.contentOffset.x / heroWidth);
-      setCurrentIndex(index);
-    };
-
     const openViewer = (index: number) => {
       if (!images.length) return;
       setViewerIndex(index);
@@ -280,58 +283,63 @@ export const SessionBottomSheet = forwardRef<any, Props>(
 
     useEffect(() => {
       if (!viewerVisible) return;
-      const id = requestAnimationFrame(() => {
+
+      const frame = requestAnimationFrame(() => {
         viewerScrollRef.current?.scrollTo({
           x: viewerIndex * SCREEN_WIDTH,
           animated: false,
         });
       });
-      return () => cancelAnimationFrame(id);
+
+      return () => cancelAnimationFrame(frame);
     }, [viewerVisible, viewerIndex]);
 
     const handleReserve = () => {
       if (!session?.id || (session?.spots_left ?? 1) <= 0) return;
 
+      navigatingAwayFromTeacherRef.current = true;
       modalRef.current?.dismiss();
       onClose();
 
       requestAnimationFrame(() => {
-         safePush(`/(modal)/booking/${session.id}`);
+        safePush(`/(modal)/booking/${session.id}`);
       });
     };
 
     const handleTeacherPress = () => {
       if (!teacherId) return;
 
-      modalRef.current?.dismiss();
-      onClose();
+      openingTeacherRef.current = true;
+      setTeacherProfileId(teacherId);
 
       requestAnimationFrame(() => {
-         safePush(`/(modal)/teacher/${teacherId}`);
+        teacherSheetRef.current?.present?.();
+
+        setTimeout(() => {
+          openingTeacherRef.current = false;
+        }, 500);
       });
     };
 
-    const handleHeroLayout = (e: LayoutChangeEvent) => {
-      const width = Math.round(e.nativeEvent.layout.width);
-      if (width > 0 && width !== heroWidth) {
-        setHeroWidth(width);
-      }
-    };
-
     const title = session?.class?.title?.trim() || "Session";
+
     const description =
       session?.class?.description?.trim() || "No description added yet.";
+
     const category = session?.class?.category?.trim() || null;
-    const location =
-      session?.rough_location?.trim() || "Exact location shared after booking";
+
+const location = session?.rough_location?.trim() || null;
     const teacherName = session?.teacher?.name?.trim() || "Teacher";
+
     const teacherBio =
       session?.teacher?.bio?.trim() ||
       "Tap to view the teacher profile and learn more.";
-    const teacherAvatar =
+
+    const teacherAvatar = mediaUrl(
       session?.teacher?.avatarUrl?.trim() ||
-      session?.teacher?.image_url?.trim() ||
-      null;
+        session?.teacher?.image_url?.trim() ||
+        null,
+    );
 
     const attendanceLabel = buildAttendanceLabel(session);
     const isFull = (session?.spots_left ?? 1) <= 0;
@@ -341,9 +349,27 @@ export const SessionBottomSheet = forwardRef<any, Props>(
         <BottomSheetModal
           ref={modalRef}
           index={0}
-          snapPoints={["72%", "92%"]}
+snapPoints={["82%", "96%"]}
+          stackBehavior="push"
           enablePanDownToClose
-          onDismiss={onClose}
+          onDismiss={() => {
+            if (navigatingAwayFromTeacherRef.current) {
+              navigatingAwayFromTeacherRef.current = false;
+              openingTeacherRef.current = false;
+              sessionDismissedForTeacherRef.current = false;
+              setTeacherProfileId(null);
+              setSession(null);
+              onClose();
+              return;
+            }
+
+            if (openingTeacherRef.current || teacherProfileId) {
+              sessionDismissedForTeacherRef.current = true;
+              return;
+            }
+
+            onClose();
+          }}
           style={styles.sheetModal}
           handleIndicatorStyle={styles.handleIndicator}
           backdropComponent={(props) => (
@@ -362,7 +388,7 @@ export const SessionBottomSheet = forwardRef<any, Props>(
               <BottomSheetScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{
-                  paddingBottom: 120 + insets.bottom,
+                  paddingBottom: 190 + insets.bottom,
                 }}
               >
                 {loading ? (
@@ -378,88 +404,76 @@ export const SessionBottomSheet = forwardRef<any, Props>(
                 ) : (
                   <>
                     <View style={styles.heroOuter}>
-                      <View onLayout={handleHeroLayout} style={styles.heroInner}>
-                        {heroWidth > 0 ? (
-                          <ScrollView
-                            ref={heroScrollRef}
-                            key={`${session?.id ?? "session"}-${slides.length}-${heroWidth}`}
-                            horizontal
-                            pagingEnabled
-                            decelerationRate="fast"
-                            snapToInterval={heroWidth}
-                            snapToAlignment="start"
-                            disableIntervalMomentum
-                            onMomentumScrollEnd={handleScroll}
-                            showsHorizontalScrollIndicator={false}
-                            style={styles.heroScroll}
+                      <View style={styles.heroGrid}>
+                        {slides.map((uri, index) => (
+                          <Pressable
+                            key={`${session?.id ?? "session"}-image-${index}`}
+                            onPress={() => {
+                              if (uri) openViewer(index);
+                            }}
+                            style={styles.heroTile}
                           >
-                            {slides.map((uri: string | null, i: number) => (
-                              <Pressable
-                                key={`${session?.id ?? "session"}-image-${i}`}
-                                onPress={() => {
-                                  if (uri) openViewer(i);
-                                }}
-                                style={[styles.heroSlide, { width: heroWidth }]}
-                              >
-                                {uri ? (
-                                  <Image
-                                    source={{ uri }}
-                                    style={styles.heroImage}
-                                    resizeMode="cover"
-                                  />
-                                ) : (
-                                  <View style={styles.heroPlaceholder}>
-                                    <Text style={styles.heroPlaceholderText}>
-                                      No image
-                                    </Text>
-                                  </View>
-                                )}
-                                <View style={styles.heroOverlay} />
-                              </Pressable>
-                            ))}
-                          </ScrollView>
-                        ) : null}
-
-                        <View style={styles.dotsWrap}>
-                          {slides.map((_: string | null, i: number) => (
-                            <View
-                              key={`dot-${i}`}
-                              style={[
-                                styles.dot,
-                                currentIndex === i ? styles.dotActive : null,
-                              ]}
-                            />
-                          ))}
-                        </View>
-
-                        <View style={styles.heroHintWrap}>
-                          <Text style={styles.heroHintText}>
-                            Swipe photos · Tap to expand
-                          </Text>
-                        </View>
+                            {uri ? (
+                              <Image
+                                source={{ uri }}
+                                style={styles.heroTileImage}
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <View style={styles.heroTilePlaceholder}>
+                                <Ionicons
+                                  name="image-outline"
+                                  size={22}
+                                  color={COLORS.textMuted}
+                                />
+                                <Text style={styles.heroTilePlaceholderText}>
+                                  No image
+                                </Text>
+                              </View>
+                            )}
+                          </Pressable>
+                        ))}
                       </View>
+
+                      <Text style={styles.heroGridHint}>
+                        Tap a photo to expand
+                      </Text>
                     </View>
 
                     <View style={styles.contentWrap}>
                       <View style={styles.infoCardOuter}>
                         <View style={styles.infoCardInner}>
-                          <View style={styles.headerRow}>
-                            <View style={styles.titleBlock}>
-                              <Text style={styles.title}>{title}</Text>
-                              <Text style={styles.locationText}>{location}</Text>
-                            </View>
+<View style={styles.headerRow}>
+  <View style={styles.titleBlock}>
+    <Text style={styles.title}>{title}</Text>
+  </View>
 
-                            <View style={styles.pricePill}>
-                              <Text style={styles.priceText}>
-                                €{session?.price ?? 0}
-                              </Text>
-                            </View>
-                          </View>
+  <View style={styles.pricePill}>
+    <Text style={styles.priceText}>€{session?.price ?? 0}</Text>
+  </View>
+</View>
 
-                        <View style={styles.sectionCardInner}>
-                          <Text style={styles.sectionLabel}>Description</Text>
-                          <Text style={styles.descriptionText}>{description}</Text>
-                        </View>
+<View style={styles.locationInfoBox}>
+  <View style={styles.locationInfoHeader}>
+    <Ionicons name="location-outline" size={16} color={COLORS.accent} />
+    <Text style={styles.locationInfoTitle}>Location</Text>
+  </View>
+
+  <Text style={styles.locationInfoText}>{location}</Text>
+
+  <Text style={styles.locationInfoHint}>
+    Exact address and arrival instructions are shared after your booking is confirmed.
+  </Text>
+</View>
+
+
+
+<View style={styles.descriptionBox}>
+  <Text style={styles.sectionLabel}>Description</Text>
+  <Text style={styles.descriptionText}>
+    {description}
+  </Text>
+</View>
 
                           <View style={styles.chipsRow}>
                             <View style={styles.chip}>
@@ -501,8 +515,6 @@ export const SessionBottomSheet = forwardRef<any, Props>(
                         </View>
                       </View>
 
-  
-
                       <Pressable
                         onPress={handleTeacherPress}
                         style={styles.sectionCardOuter}
@@ -542,7 +554,9 @@ export const SessionBottomSheet = forwardRef<any, Props>(
 
                       <View style={styles.sectionCardOuter}>
                         <View style={styles.sectionCardInner}>
-                          <Text style={styles.sectionLabel}>Session details</Text>
+                          <Text style={styles.sectionLabel}>
+                            Session details
+                          </Text>
 
                           <View style={styles.detailRow}>
                             <Text style={styles.detailKey}>Price</Text>
@@ -568,19 +582,33 @@ export const SessionBottomSheet = forwardRef<any, Props>(
                             </Text>
                           </View>
 
-                          <View style={styles.detailRow}>
-                            <Text style={styles.detailKey}>Duration</Text>
-                            <Text style={styles.detailValue}>
-                              {session?.duration ?? 0} min
-                            </Text>
-                          </View>
+                        <View style={styles.detailRow}>
+  <Text style={styles.detailKey}>Duration</Text>
+  <Text style={styles.detailValue}>
+    {session?.duration ?? 0} min
+  </Text>
+</View>
 
-                          <View style={styles.detailRowLast}>
-                            <Text style={styles.detailKey}>Capacity</Text>
-                            <Text style={styles.detailValue}>
-                              Max {session?.max_participants ?? 0}
-                            </Text>
-                          </View>
+<View style={styles.detailRow}>
+  <Text style={styles.detailKey}>Location</Text>
+
+  <View style={styles.locationDetailWrap}>
+    <Text style={styles.detailValue}>
+      {location || "Shared after booking"}
+    </Text>
+
+    <Text style={styles.locationDetailHint}>
+      Exact address shared after confirmation
+    </Text>
+  </View>
+</View>
+
+<View style={styles.detailRowLast}>
+  <Text style={styles.detailKey}>Capacity</Text>
+  <Text style={styles.detailValue}>
+    Max {session?.max_participants ?? 0}
+  </Text>
+</View>
                         </View>
                       </View>
 
@@ -645,8 +673,8 @@ export const SessionBottomSheet = forwardRef<any, Props>(
               pagingEnabled
               showsHorizontalScrollIndicator={false}
             >
-              {images.map((uri: string, i: number) => (
-                <View key={i} style={styles.viewerSlide}>
+              {images.map((uri, index) => (
+                <View key={`${uri}-${index}`} style={styles.viewerSlide}>
                   <Image
                     source={{ uri }}
                     style={styles.viewerImage}
@@ -657,6 +685,33 @@ export const SessionBottomSheet = forwardRef<any, Props>(
             </ScrollView>
           </View>
         </Modal>
+
+        <TeacherProfileBottomSheet
+          ref={teacherSheetRef}
+          teacherId={teacherProfileId}
+          onBeforeNavigateAway={() => {
+            navigatingAwayFromTeacherRef.current = true;
+            openingTeacherRef.current = false;
+            sessionDismissedForTeacherRef.current = false;
+            setTeacherProfileId(null);
+            modalRef.current?.dismiss?.();
+            onClose();
+          }}
+          onClose={() => {
+            setTeacherProfileId(null);
+
+            if (
+              !navigatingAwayFromTeacherRef.current &&
+              sessionDismissedForTeacherRef.current
+            ) {
+              sessionDismissedForTeacherRef.current = false;
+
+              requestAnimationFrame(() => {
+                modalRef.current?.present?.();
+              });
+            }
+          }}
+        />
       </>
     );
   },
@@ -736,82 +791,46 @@ const styles = StyleSheet.create({
     paddingTop: 14,
   },
 
-  heroInner: {
+  heroGrid: {
     height: HERO_HEIGHT,
-    borderRadius: 22,
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  heroTile: {
+    flex: 1,
+    borderRadius: 18,
     overflow: "hidden",
     backgroundColor: COLORS.surfaceSoft,
-    position: "relative",
     borderWidth: 1,
     borderColor: COLORS.border,
   },
 
-  heroScroll: {
-    flex: 1,
-  },
-
-  heroSlide: {
-    height: HERO_HEIGHT,
-    overflow: "hidden",
-  },
-
-  heroImage: {
+  heroTileImage: {
     width: "100%",
     height: "100%",
   },
 
-  heroPlaceholder: {
+  heroTilePlaceholder: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: COLORS.surfaceSoft,
-  },
-
-  heroPlaceholderText: {
-    color: COLORS.textMuted,
-    fontSize: 15,
-  },
-
-  heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: COLORS.heroOverlay,
-  },
-
-  dotsWrap: {
-    position: "absolute",
-    top: 12,
-    alignSelf: "center",
-    flexDirection: "row",
     gap: 6,
   },
 
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 999,
-    backgroundColor: "#FFFFFF",
-    opacity: 0.38,
+  heroTilePlaceholderText: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    fontWeight: "700",
   },
 
-  dotActive: {
-    width: 16,
-    opacity: 1,
-  },
-
-  heroHintWrap: {
-    position: "absolute",
-    bottom: 12,
-    alignSelf: "center",
-    backgroundColor: "rgba(0,0,0,0.45)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-
-  heroHintText: {
-    color: "#FFFFFF",
+  heroGridHint: {
+    color: COLORS.textMuted,
     fontSize: 12,
     fontWeight: "700",
+    marginTop: 8,
+    textAlign: "center",
   },
 
   contentWrap: {
@@ -849,6 +868,12 @@ const styles = StyleSheet.create({
     padding: 16,
   },
 
+  descriptionBox: {
+    marginTop: 14,
+    borderRadius: 18,
+    backgroundColor: COLORS.bg,
+  },
+
   headerRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -871,6 +896,59 @@ const styles = StyleSheet.create({
     marginTop: 4,
     lineHeight: 20,
   },
+
+  locationWrap: {
+  marginTop: 8,
+},
+
+locationRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 6,
+},
+
+locationSubtext: {
+  marginTop: 6,
+  color: COLORS.textMuted,
+  fontSize: 12,
+  lineHeight: 18,
+},
+
+locationCard: {
+  marginTop: 18,
+  borderRadius: 18,
+  padding: 14,
+  backgroundColor: COLORS.surfaceSoft,
+  borderWidth: 1,
+  borderColor: COLORS.border,
+},
+
+locationCardHeader: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 8,
+  marginBottom: 10,
+},
+
+locationCardTitle: {
+  color: COLORS.text,
+  fontSize: 15,
+  fontWeight: "800",
+},
+
+locationCardText: {
+  color: COLORS.text,
+  fontSize: 15,
+  lineHeight: 22,
+  fontWeight: "700",
+},
+
+locationCardHint: {
+  marginTop: 8,
+  color: COLORS.textSoft,
+  fontSize: 13,
+  lineHeight: 20,
+},
 
   pricePill: {
     paddingHorizontal: 12,
@@ -952,6 +1030,41 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
+  locationInfoBox: {
+  marginTop: 14,
+  borderRadius: 18,
+  backgroundColor: COLORS.surfaceSoft,
+  borderWidth: 1,
+  borderColor: COLORS.borderStrong,
+  padding: 14,
+},
+
+locationInfoHeader: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 7,
+  marginBottom: 8,
+},
+
+locationInfoTitle: {
+  color: COLORS.text,
+  fontSize: 14,
+  fontWeight: "900",
+},
+
+locationInfoText: {
+  color: COLORS.text,
+  fontSize: 14,
+  fontWeight: "800",
+  lineHeight: 20,
+},
+
+locationInfoHint: {
+  color: COLORS.textSoft,
+  fontSize: 13,
+  lineHeight: 19,
+  marginTop: 6,
+},
   teacherAvatarFallbackText: {
     color: "#FFFFFF",
     fontSize: 18,
@@ -973,13 +1086,6 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontSize: 13,
     lineHeight: 18,
-  },
-
-  divider: {
-    marginTop: 18,
-    marginBottom: 18,
-    height: 1,
-    backgroundColor: COLORS.divider,
   },
 
   detailRow: {
@@ -1014,6 +1120,18 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
 
+  locationDetailWrap: {
+  flex: 1,
+  alignItems: "flex-end",
+},
+
+locationDetailHint: {
+  marginTop: 4,
+  color: COLORS.textMuted,
+  fontSize: 11,
+  textAlign: "right",
+  lineHeight: 16,
+},
   attendanceBar: {
     flexDirection: "row",
     alignItems: "center",

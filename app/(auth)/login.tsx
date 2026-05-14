@@ -1,3 +1,5 @@
+import AuthScreenShell from "@/src/components/auth/AuthScreenShell";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import { useState } from "react";
 import {
   Alert,
@@ -11,8 +13,6 @@ import {
 } from "react-native";
 import { api } from "../../src/api/client";
 import { authStore } from "../../src/store/auth.store";
-import { safePush, safeReplace } from "@/src/utils/safeRouter";
-import AuthScreenShell from "@/src/components/auth/AuthScreenShell";
 
 const COLORS = {
   bg: "#05070F",
@@ -54,11 +54,13 @@ export default function LoginScreen() {
         throw new Error("Missing auth tokens from /auth/login");
       }
 
-      await authStore.getState().setAuth(
-        res.data.access_token,
-        res.data.refresh_token,
-        !!res.data.user?.hasTeacherProfile,
-      );
+  await authStore.getState().setAuth(
+  res.data.access_token,
+  res.data.refresh_token,
+  !!res.data.user?.hasTeacherProfile,
+  res.data.user?.is_admin === true,
+  res.data.user?.image_url ?? null,
+);
 
       await authStore.getState().refreshMe();
 
@@ -106,7 +108,7 @@ export default function LoginScreen() {
         <TextInput
           value={email}
           onChangeText={setEmail}
-          autoCapitalize="none"
+          autoCapitalize="sentences"
           keyboardType="email-address"
           placeholder="Email"
           placeholderTextColor={COLORS.textMuted}

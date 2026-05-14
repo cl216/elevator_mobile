@@ -1,7 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import { router } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
+import { mediaUrl } from "@/src/utils/mediaUrl";
+import { autoCapitalize } from "@/src/utils/text";
 import {
   ActivityIndicator,
   Alert,
@@ -13,7 +16,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { safePush, safeReplace } from "@/src/utils/safeRouter";
+import { safeReplace } from "@/src/utils/safeRouter";
 import {
   createTeacherProfile,
   getMyTeacherProfile,
@@ -25,24 +28,31 @@ import AppLayout from "@/src/components/layout/AppLayout";
 import { AppButton } from "@/src/components/ui/AppButton";
 import { AppScreen } from "@/src/components/ui/AppScreen";
 
+const BIO_MAX_LENGTH = 300;
+
 const COLORS = {
-  bg: "#05070F",
-  surface: "#0D1424",
-  surfaceSoft: "#121A2C",
+  bg: "#12051F",
+  surface: "#241032",
+  surfaceSoft: "#321447",
+  surfaceDeep: "#0B0314",
 
-  text: "#F5F8FF",
-  textSoft: "rgba(222,230,247,0.72)",
-  textMuted: "rgba(222,230,247,0.52)",
+  text: "#FDF7FF",
+  textSoft: "rgba(244,229,255,0.76)",
+  textMuted: "rgba(244,229,255,0.52)",
 
-  border: "rgba(110,145,255,0.12)",
-  borderStrong: "rgba(110,145,255,0.28)",
+  border: "rgba(216,180,254,0.16)",
+  borderStrong: "rgba(216,180,254,0.42)",
 
-  accent: "#6F92FF",
-  accentSoft: "rgba(111,146,255,0.12)",
-  accentBorder: "rgba(111,146,255,0.25)",
+  accent: "#C084FC",
+  accentStrong: "#A855F7",
+  accentSoft: "rgba(192,132,252,0.18)",
+  accentBorder: "rgba(216,180,254,0.38)",
 
-  buttonSecondary: "#121A2C",
-  divider: "rgba(255,255,255,0.06)",
+  buttonSecondary: "#321447",
+  teacherCard: "#1B0829",
+  teacherCardInner: "#100318",
+
+  divider: "rgba(255,255,255,0.07)",
 };
 
 function ProfileStyleCard({
@@ -82,6 +92,36 @@ function ProfileStyleCard({
   );
 }
 
+function previewUri(uri?: string | null) {
+  if (!uri) return null;
+  return uri.startsWith("file:") ? uri : mediaUrl(uri);
+}
+
+function PreviewGalleryTile({
+  uri,
+  index,
+}: {
+  uri: string | null;
+  index: number;
+}) {
+  return (
+    <View style={styles.previewSideTile}>
+      {uri ? (
+        <Image
+          source={{ uri }}
+          style={styles.previewSideImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={styles.previewSidePlaceholder}>
+          <Ionicons name="image-outline" size={18} color={COLORS.textMuted} />
+          <Text style={styles.previewSidePlaceholderText}>Photo {index}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function TeacherProfileScreen() {
   const hasTeacherProfile = authStore((s) => s.hasTeacherProfile);
   const currentUser = authStore((s: any) => s.user);
@@ -113,7 +153,7 @@ export default function TeacherProfileScreen() {
         if (!alive || !existing) return;
 
         setFullName(existing.full_name ?? existing.display_name ?? "");
-        setBio(existing.bio ?? "");
+        setBio(String(existing.bio ?? "").slice(0, BIO_MAX_LENGTH));
         setProfileImageUrl(existing.image_url ?? existing.avatar_url ?? "");
 
         const gallery = Array.isArray(existing.gallery_image_urls)
@@ -154,18 +194,31 @@ export default function TeacherProfileScreen() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert("Permission needed", "Please allow photo access to choose images.");
+      Alert.alert(
+        "Permission needed",
+        "Please allow photo access to choose images.",
+      );
       return;
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-quality: 0.55,    });
+      quality: 0.55,
+    });
 
-    if (!result.canceled && result.assets?.[0]?.uri) {
-      setter(result.assets[0].uri);
-    }
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+
+    const sourceUri = result.assets[0].uri;
+    const extension = sourceUri.split(".").pop() || "jpg";
+    const safeUri = `${FileSystem.cacheDirectory}teacher-profile-${Date.now()}.${extension}`;
+
+    await FileSystem.copyAsync({
+      from: sourceUri,
+      to: safeUri,
+    });
+
+    setter(safeUri);
   }
 
   async function handleSave() {
@@ -187,26 +240,26 @@ quality: 0.55,    });
           : profileImageUrl.trim()
         : undefined;
 
-const uploadedGalleryImages: string[] = [];
+      const uploadedGalleryImages: string[] = [];
 
-for (const image of galleryImages) {
-  if (image.startsWith("file:")) {
-    const uploadedUrl = await uploadImage(image);
-    uploadedGalleryImages.push(uploadedUrl);
-  } else {
-    uploadedGalleryImages.push(image);
-  }
-}
+      for (const image of galleryImages) {
+        if (image.startsWith("file:")) {
+          const uploadedUrl = await uploadImage(image);
+          uploadedGalleryImages.push(uploadedUrl);
+        } else {
+          uploadedGalleryImages.push(image);
+        }
+      }
 
-await createTeacherProfile({
-  full_name: fullName.trim(),
-  bio: bio.trim() || undefined,
-  image_url: uploadedProfileImageUrl,
-  gallery_image_urls: uploadedGalleryImages,
-  image_url_1: uploadedGalleryImages[0],
-  image_url_2: uploadedGalleryImages[1],
-  image_url_3: uploadedGalleryImages[2],
-} as any);
+      await createTeacherProfile({
+        full_name: fullName.trim(),
+        bio: bio.trim().slice(0, BIO_MAX_LENGTH) || undefined,
+        image_url: uploadedProfileImageUrl,
+        gallery_image_urls: uploadedGalleryImages,
+        image_url_1: uploadedGalleryImages[0],
+        image_url_2: uploadedGalleryImages[1],
+        image_url_3: uploadedGalleryImages[2],
+      } as any);
 
       await authStore.getState().setHasTeacherProfile(true);
 
@@ -216,7 +269,7 @@ await createTeacherProfile({
         [
           {
             text: "OK",
-            onPress: () =>  safeReplace("/(teacher)/dashboard"),
+            onPress: () => safeReplace("/(teacher)/dashboard"),
           },
         ],
       );
@@ -237,9 +290,13 @@ await createTeacherProfile({
     }
   }
 
-  const previewImages = [imageUrl1, imageUrl2, imageUrl3]
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const profileUri = previewUri(profileImageUrl.trim());
+  const coverUri = previewUri(imageUrl1.trim());
+  const sideImageOneUri = previewUri(imageUrl2.trim());
+  const sideImageTwoUri = previewUri(imageUrl3.trim());
+
+  const previewName = fullName.trim() || "Your name";
+  const previewBio = bio.trim() || "Your teacher bio will appear here.";
 
   return (
     <AppLayout>
@@ -250,15 +307,18 @@ await createTeacherProfile({
         >
           <View style={styles.hero}>
             <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>Teacher</Text>
+              <Text style={styles.heroBadgeText}>Teacher workspace</Text>
             </View>
 
             <Text style={styles.title}>
-              {hasTeacherProfile ? "Edit profile" : "Create your teacher profile"}
+              {hasTeacherProfile
+                ? "Edit teacher profile"
+                : "Create your teacher profile"}
             </Text>
 
             <Text style={styles.subtitle}>
-              Manage the profile learners see when they open your teacher view.
+              Manage the purple teacher profile learners see when they open
+              your teacher view.
             </Text>
           </View>
 
@@ -280,7 +340,8 @@ await createTeacherProfile({
                   <Text style={styles.label}>Full name</Text>
                   <TextInput
                     value={fullName}
-                    onChangeText={setFullName}
+          onChangeText={setFullName}
+          autoCapitalize="words"                
                     placeholder="Aoife Murphy"
                     placeholderTextColor={COLORS.textMuted}
                     style={styles.input}
@@ -288,17 +349,24 @@ await createTeacherProfile({
                 </View>
 
                 <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Bio</Text>
-                  <TextInput
-                    value={bio}
-                    onChangeText={setBio}
-                    placeholder="Tell learners about your teaching style, experience, and what makes your sessions special."
-                    placeholderTextColor={COLORS.textMuted}
-                    multiline
-                    maxLength={1000}
-                    style={styles.textArea}
-                    textAlignVertical="top"
-                  />
+                  <View style={styles.labelRow}>
+                    <Text style={styles.label}>Bio</Text>
+                    <Text style={styles.counterText}>
+                      {bio.length}/{BIO_MAX_LENGTH}
+                    </Text>
+                  </View>
+
+<TextInput
+  value={bio}
+  onChangeText={(text) => setBio(text.slice(0, BIO_MAX_LENGTH))}
+  autoCapitalize="sentences"
+  placeholder="Tell learners about your teaching style, experience, and what makes your sessions special."
+  placeholderTextColor={COLORS.textMuted}
+  multiline
+  maxLength={BIO_MAX_LENGTH}
+  style={styles.textArea}
+  textAlignVertical="top"
+/>
                 </View>
 
                 <View style={styles.noticeBox}>
@@ -317,7 +385,7 @@ await createTeacherProfile({
               <ProfileStyleCard
                 icon="image-outline"
                 title="Profile photo"
-                body="Optional for now. This is the main image learners associate with you."
+                body="This circular photo appears beside your name on your teacher profile."
               >
                 <Pressable
                   onPress={() => pickImage(setProfileImageUrl)}
@@ -325,14 +393,16 @@ await createTeacherProfile({
                 >
                   <Ionicons name="image-outline" size={18} color={COLORS.text} />
                   <Text style={styles.ctaButtonText}>
-                    {profileImageUrl ? "Change profile photo" : "Choose profile photo"}
+                    {profileImageUrl
+                      ? "Change profile photo"
+                      : "Choose profile photo"}
                   </Text>
                 </Pressable>
 
-                {profileImageUrl.trim() ? (
+                {profileUri ? (
                   <View style={styles.profilePreviewWrap}>
                     <Image
-                      source={{ uri: profileImageUrl.trim() }}
+                      source={{ uri: profileUri }}
                       style={styles.profilePreview}
                       resizeMode="cover"
                     />
@@ -342,89 +412,118 @@ await createTeacherProfile({
 
               <ProfileStyleCard
                 icon="images-outline"
-                title="Gallery images"
-                body="Optional for now. Add up to 3 extra images to make your teacher view feel richer."
+                title="Profile images"
+                body="Gallery image 1 is your cover photo. Images 2 and 3 appear in the side gallery."
               >
                 <View style={styles.galleryPickerStack}>
-                  {[setImageUrl1, setImageUrl2, setImageUrl3].map((setter, index) => {
-                    const value = [imageUrl1, imageUrl2, imageUrl3][index];
+                  <Pressable
+                    onPress={() => pickImage(setImageUrl1)}
+                    style={styles.ctaButton}
+                  >
+                    <Ionicons name="albums-outline" size={18} color={COLORS.text} />
+                    <Text style={styles.ctaButtonText}>
+                      {imageUrl1 ? "Change cover photo" : "Choose cover photo"}
+                    </Text>
+                  </Pressable>
 
-                    return (
-                      <Pressable
-                        key={index}
-                        onPress={() => pickImage(setter)}
-                        style={styles.ctaButton}
-                      >
-                        <Ionicons name="images-outline" size={18} color={COLORS.text} />
-                        <Text style={styles.ctaButtonText}>
-                          {value
-                            ? `Change gallery image ${index + 1}`
-                            : `Choose gallery image ${index + 1}`}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+                  <Pressable
+                    onPress={() => pickImage(setImageUrl2)}
+                    style={styles.ctaButton}
+                  >
+                    <Ionicons name="images-outline" size={18} color={COLORS.text} />
+                    <Text style={styles.ctaButtonText}>
+                      {imageUrl2
+                        ? "Change side gallery photo 1"
+                        : "Choose side gallery photo 1"}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => pickImage(setImageUrl3)}
+                    style={styles.ctaButton}
+                  >
+                    <Ionicons name="images-outline" size={18} color={COLORS.text} />
+                    <Text style={styles.ctaButtonText}>
+                      {imageUrl3
+                        ? "Change side gallery photo 2"
+                        : "Choose side gallery photo 2"}
+                    </Text>
+                  </Pressable>
                 </View>
               </ProfileStyleCard>
 
-              <ProfileStyleCard
-                icon="eye-outline"
-                title="Teacher view preview"
-                body="A quick preview of how your profile may feel to learners."
-              >
-                <View style={styles.previewGallery}>
-                  {[0, 1, 2].map((index) => {
-                    const imageUrl = previewImages[index];
+<ProfileStyleCard
+  icon="eye-outline"
+  title="Teacher view preview"
+  body="This matches the learner-facing teacher profile."
+>
+  <View style={styles.previewProfileCard}>
+    <View style={styles.previewCoverWrap}>
+      {coverUri ? (
+        <Image
+          source={{ uri: coverUri }}
+          style={styles.previewCoverImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={styles.previewCoverPlaceholder}>
+          <Ionicons name="image-outline" size={24} color={COLORS.textMuted} />
+        </View>
+      )}
 
-                    return (
-                      <View key={index} style={styles.previewTile}>
-                        {imageUrl ? (
-                          <Image
-                            source={{ uri: imageUrl }}
-                            style={styles.previewTileImage}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <View style={styles.previewTilePlaceholder}>
-                            <Text style={styles.previewTilePlaceholderText}>
-                              Photo
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
+      <View style={styles.previewCoverOverlay} />
+    </View>
 
-                <View style={styles.previewContent}>
-                  <View style={styles.previewTeacherRow}>
-                    {profileImageUrl.trim() ? (
-                      <Image
-                        source={{ uri: profileImageUrl.trim() }}
-                        style={styles.previewAvatar}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={styles.previewAvatarFallback}>
-                        <Ionicons
-                          name="person-outline"
-                          size={24}
-                          color={COLORS.textMuted}
-                        />
-                      </View>
-                    )}
+    <View style={styles.previewContentWrap}>
+      <View style={styles.previewTopContentRow}>
+        <View style={styles.previewLeftIntro}>
+          <View style={styles.previewAvatarRing}>
+            {profileUri ? (
+              <Image
+                source={{ uri: profileUri }}
+                style={styles.previewAvatar}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.previewAvatarFallback}>
+                <Text style={styles.previewAvatarFallbackText}>
+                  {previewName.slice(0, 1).toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </View>
 
-                    <View style={styles.previewTextWrap}>
-                      <Text style={styles.previewName}>
-                        {fullName.trim() || "Your name"}
-                      </Text>
-                      <Text style={styles.previewBio} numberOfLines={3}>
-                        {bio.trim() || "Your teacher bio will appear here."}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </ProfileStyleCard>
+          <Text style={styles.previewName} numberOfLines={2}>
+            {previewName}
+          </Text>
+
+          <Text style={styles.previewTagline}>Teacher</Text>
+        </View>
+
+        <View style={styles.previewGalleryRow}>
+          <PreviewGalleryTile uri={sideImageOneUri} index={2} />
+          <PreviewGalleryTile uri={sideImageTwoUri} index={3} />
+        </View>
+      </View>
+
+      <View style={styles.previewBioBox}>
+        <View style={styles.previewBioHeader}>
+          <View style={styles.previewBioIconCircle}>
+            <Ionicons name="person-outline" size={18} color="#FFFFFF" />
+          </View>
+
+          <Text style={styles.previewBioTitle}>Bio</Text>
+        </View>
+
+        <Text style={styles.previewBio}>{previewBio}</Text>
+
+        <Text style={styles.previewBioCount}>
+          {Math.min(previewBio.length, BIO_MAX_LENGTH)} / {BIO_MAX_LENGTH}
+        </Text>
+      </View>
+    </View>
+  </View>
+</ProfileStyleCard>
 
               <View style={styles.actionStack}>
                 <AppButton
@@ -464,31 +563,32 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
 
+  
   hero: {
     marginBottom: 18,
   },
 
   heroBadge: {
     alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: "rgba(111,146,255,0.12)",
+    backgroundColor: COLORS.accentStrong,
     borderWidth: 1,
-    borderColor: "rgba(111,146,255,0.25)",
+    borderColor: COLORS.accentBorder,
     marginBottom: 12,
   },
 
   heroBadgeText: {
     color: COLORS.text,
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   title: {
     color: COLORS.text,
     fontSize: 30,
-    fontWeight: "800",
+    fontWeight: "900",
     lineHeight: 34,
     marginBottom: 8,
   },
@@ -500,10 +600,10 @@ const styles = StyleSheet.create({
   },
 
   cardOuter: {
-    borderRadius: 24,
-    borderWidth: 1.2,
+    borderRadius: 26,
+    borderWidth: 1.4,
     borderColor: COLORS.borderStrong,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.teacherCard,
     marginBottom: 14,
     overflow: "hidden",
   },
@@ -511,7 +611,7 @@ const styles = StyleSheet.create({
   cardInner: {
     margin: 8,
     borderRadius: 18,
-    backgroundColor: COLORS.bg,
+    backgroundColor: COLORS.teacherCardInner,
     overflow: "hidden",
     padding: 16,
   },
@@ -526,9 +626,9 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "rgba(111,146,255,0.18)",
+    backgroundColor: COLORS.accentSoft,
     borderWidth: 1,
-    borderColor: "rgba(111,146,255,0.28)",
+    borderColor: COLORS.accentBorder,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -545,7 +645,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     color: COLORS.text,
     fontSize: 18,
-    fontWeight: "800",
+    fontWeight: "900",
     flex: 1,
   },
 
@@ -560,18 +660,32 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
 
+  labelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 8,
+  },
+
   label: {
     color: COLORS.text,
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
     marginBottom: 8,
+  },
+
+  counterText: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    fontWeight: "800",
   },
 
   input: {
     minHeight: 52,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.accentBorder,
     backgroundColor: COLORS.surfaceSoft,
     color: COLORS.text,
     fontSize: 15,
@@ -580,10 +694,10 @@ const styles = StyleSheet.create({
   },
 
   textArea: {
-    minHeight: 130,
+    minHeight: 120,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.accentBorder,
     backgroundColor: COLORS.surfaceSoft,
     color: COLORS.text,
     fontSize: 15,
@@ -612,9 +726,9 @@ const styles = StyleSheet.create({
   ctaButton: {
     minHeight: 48,
     borderRadius: 16,
-    backgroundColor: "rgba(111,146,255,0.16)",
+    backgroundColor: COLORS.accentSoft,
     borderWidth: 1,
-    borderColor: "rgba(111,146,255,0.25)",
+    borderColor: COLORS.accentBorder,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -626,7 +740,7 @@ const styles = StyleSheet.create({
   ctaButtonText: {
     color: COLORS.text,
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   galleryPickerStack: {
@@ -643,94 +757,187 @@ const styles = StyleSheet.create({
     height: 92,
     borderRadius: 46,
     borderWidth: 2,
-    borderColor: COLORS.borderStrong,
+    borderColor: COLORS.accentBorder,
     backgroundColor: COLORS.surfaceSoft,
   },
+previewProfileCard: {
+  borderRadius: 24,
+  backgroundColor: "rgba(5,7,15,0.72)",
+  borderWidth: 1,
+  borderColor: COLORS.borderStrong,
+  overflow: "hidden",
+},
 
-  previewGallery: {
-    flexDirection: "row",
-    gap: 8,
-    height: 118,
-    marginBottom: 14,
-  },
+previewCoverWrap: {
+  height: 230,
+  backgroundColor: COLORS.surfaceSoft,
+  overflow: "hidden",
+  alignItems: "center",
+  justifyContent: "center",
+},
 
-  previewTile: {
-    flex: 1,
-    borderRadius: 14,
-    overflow: "hidden",
-    backgroundColor: COLORS.surfaceSoft,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
+previewCoverImage: {
+  width: "100%",
+  height: "100%",
+},
 
-  previewTileImage: {
-    width: "100%",
-    height: "100%",
-  },
+previewCoverPlaceholder: {
+  flex: 1,
+  alignItems: "center",
+  justifyContent: "center",
+},
 
-  previewTilePlaceholder: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: COLORS.surfaceSoft,
-  },
+previewCoverOverlay: {
+  ...StyleSheet.absoluteFillObject,
+  backgroundColor: "rgba(0,0,0,0.12)",
+},
 
-  previewTilePlaceholderText: {
-    color: COLORS.textMuted,
-    fontSize: 14,
-    fontWeight: "700",
-  },
+previewContentWrap: {
+  paddingHorizontal: 16,
+  paddingBottom: 16,
+},
 
-  previewContent: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.divider,
-    paddingTop: 14,
-  },
+previewTopContentRow: {
+  flexDirection: "row",
+  gap: 12,
+  alignItems: "flex-start",
+},
 
-  previewTeacherRow: {
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "flex-start",
-  },
+previewLeftIntro: {
+  flex: 1,
+  alignItems: "flex-start",
+},
+previewGalleryRow: {
+  width: 142,
+  flexDirection: "row",
+  gap: 8,
+  paddingTop: 24,
+},
 
-  previewTextWrap: {
-    flex: 1,
-    justifyContent: "center",
-  },
+previewSideTile: {
+  flex: 1,
+  height: 74,
+  borderRadius: 16,
+  overflow: "hidden",
+  backgroundColor: COLORS.surfaceSoft,
+  borderWidth: 1,
+  borderColor: COLORS.borderStrong,
+},
 
-  previewAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: COLORS.surfaceSoft,
-    borderWidth: 1,
-    borderColor: COLORS.borderStrong,
-  },
+previewSideImage: {
+  width: "100%",
+  height: "100%",
+},
 
-  previewAvatarFallback: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: COLORS.surfaceSoft,
-    borderWidth: 1,
-    borderColor: COLORS.borderStrong,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+previewSidePlaceholder: {
+  flex: 1,
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 6,
+},
 
-  previewName: {
-    color: COLORS.text,
-    fontSize: 18,
-    fontWeight: "800",
-    marginBottom: 4,
-  },
+previewSidePlaceholderText: {
+  color: COLORS.textMuted,
+  fontSize: 11,
+  fontWeight: "800",
+},
 
-  previewBio: {
-    color: COLORS.textSoft,
-    fontSize: 14,
-    lineHeight: 20,
-  },
+previewAvatarRing: {
+  width: 82,
+  height: 82,
+  borderRadius: 41,
+  padding: 4,
+  backgroundColor: COLORS.accent,
+  marginTop: -48,
+  marginBottom: 12,
+},
 
+previewAvatar: {
+  width: "100%",
+  height: "100%",
+  borderRadius: 37,
+  borderWidth: 4,
+  borderColor: COLORS.teacherCardInner,
+},
+
+previewAvatarFallback: {
+  flex: 1,
+  borderRadius: 37,
+  borderWidth: 4,
+  borderColor: COLORS.teacherCardInner,
+  backgroundColor: COLORS.surfaceSoft,
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+previewAvatarFallbackText: {
+  color: COLORS.text,
+  fontSize: 28,
+  fontWeight: "900",
+},
+
+previewName: {
+  color: COLORS.text,
+  fontSize: 24,
+  fontWeight: "900",
+  lineHeight: 28,
+  marginBottom: 3,
+},
+
+previewTagline: {
+  color: COLORS.accent,
+  fontSize: 15,
+  fontWeight: "900",
+  lineHeight: 20,
+},
+
+previewBioBox: {
+  width: "100%",
+  borderRadius: 22,
+  backgroundColor: "rgba(5,7,15,0.62)",
+  borderWidth: 1,
+  borderColor: COLORS.borderStrong,
+  padding: 18,
+  marginTop: 20,
+},
+
+previewBioHeader: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 12,
+  marginBottom: 12,
+},
+
+previewBioIconCircle: {
+  width: 34,
+  height: 34,
+  borderRadius: 17,
+  backgroundColor: "rgba(111,146,255,0.18)",
+  borderWidth: 1,
+  borderColor: COLORS.accentBorder,
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+previewBioTitle: {
+  color: COLORS.text,
+  fontSize: 20,
+  fontWeight: "900",
+},
+
+previewBio: {
+  color: COLORS.textSoft,
+  fontSize: 15,
+  lineHeight: 24,
+},
+
+previewBioCount: {
+  color: COLORS.textMuted,
+  fontSize: 13,
+  fontWeight: "800",
+  textAlign: "right",
+  marginTop: 14,
+},
   actionStack: {
     gap: 10,
     marginTop: 4,

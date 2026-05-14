@@ -7,18 +7,24 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "plugins": [
-      "expo-router",
-      "expo-dev-client",
-      "expo-notifications",
-      [
-        "@rnmapbox/maps",
-        {
-          "RNMapboxMapsDownloadToken": "${MAPBOX_DOWNLOAD_TOKEN}"
-        }
-      ],
-      "@react-native-community/datetimepicker"
-    ],
+"plugins": [
+  "expo-router",
+  "expo-dev-client",
+  "expo-notifications",
+  [
+    "expo-location",
+    {
+      "locationWhenInUsePermission": "Elevator uses your location to show nearby classes."
+    }
+  ],
+  [
+    "@rnmapbox/maps",
+    {
+      "RNMapboxMapsDownloadToken": "${MAPBOX_DOWNLOAD_TOKEN}"
+    }
+  ],
+  "@react-native-community/datetimepicker"
+],
     "android": {
       "package": "com.yourcompany.elevator",
       "permissions": [

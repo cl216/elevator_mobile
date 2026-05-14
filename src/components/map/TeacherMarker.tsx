@@ -1,6 +1,7 @@
 import React from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { mediaUrl } from "@/src/utils/mediaUrl";
 
 export type Category = "music" | "art" | "other";
 
@@ -24,7 +25,7 @@ export function TeacherMarker({ avatarUrl, category, selected, onReady }: Props)
       <View style={[styles.ring, selected && styles.ringSelected]} collapsable={false}>
         {avatarUrl ? (
           <Image
-            source={{ uri: avatarUrl }}
+source={{ uri: mediaUrl(avatarUrl)! }}
             // ✅ Mapbox/Android: ensure deterministic fill + cropping
             style={styles.avatar}
             resizeMode="cover" // ✅

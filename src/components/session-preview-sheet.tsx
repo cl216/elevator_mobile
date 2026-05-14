@@ -1,6 +1,7 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
 import { View, Text, Image, Pressable } from 'react-native';
 import BottomSheet from '@gorhom/bottom-sheet';
+import { mediaUrl } from "@/src/utils/mediaUrl";
 
 export type SessionPreview = {
   sessionId: string;
@@ -52,7 +53,7 @@ export const SessionPreviewSheet = forwardRef<
           <>
             {selected.thumbnailUrl ? (
               <Image
-                source={{ uri: selected.thumbnailUrl }}
+source={{ uri: mediaUrl(selected.thumbnailUrl)! }}
                 style={{ width: '100%', height: 150, borderRadius: 14 }}
                 resizeMode="cover"
               />

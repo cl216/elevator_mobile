@@ -1,56 +1,63 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { Ionicons } from "@expo/vector-icons";
 import Mapbox from "@rnmapbox/maps";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
+import { autoCapitalize } from "@/src/utils/text";
 import {
-    ActivityIndicator,
-    Alert,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
-import { safePush, safeReplace } from "@/src/utils/safeRouter";
+import { safeReplace } from "@/src/utils/safeRouter";
 import { getApprovedCategories } from "@/src/api/categories";
 import {
-    acceptPrivateSessionRequest,
-    declinePrivateSessionRequest,
-    getMyTeacherPrivateSessionRequests,
-    type PrivateSessionRequest,
+  acceptPrivateSessionRequest,
+  declinePrivateSessionRequest,
+  getMyTeacherPrivateSessionRequests,
+  type PrivateSessionRequest,
 } from "@/src/api/privateSessionRequests";
 import {
-    getMySessions,
-    getSessionById,
-    type SessionDetail,
-    type TeacherSessionRow,
+  getMySessions,
+  getSessionById,
+  type SessionDetail,
+  type TeacherSessionRow,
 } from "@/src/api/sessions";
 import AppLayout from "@/src/components/layout/AppLayout";
 import { AppScreen } from "@/src/components/ui/AppScreen";
 
 const COLORS = {
-  bg: "#05070F",
-  surface: "#0D1424",
-  surfaceSoft: "#121A2C",
+  bg: "#12051F",
+  surface: "#241032",
+  surfaceSoft: "#321447",
+  surfaceDeep: "#0B0314",
 
-  text: "#F5F8FF",
-  textSoft: "rgba(222,230,247,0.72)",
-  textMuted: "rgba(222,230,247,0.52)",
+  text: "#FDF7FF",
+  textSoft: "rgba(244,229,255,0.76)",
+  textMuted: "rgba(244,229,255,0.52)",
 
-  border: "rgba(110,145,255,0.12)",
-  borderStrong: "rgba(110,145,255,0.28)",
+  border: "rgba(216,180,254,0.16)",
+  borderStrong: "rgba(216,180,254,0.42)",
 
-  accent: "#6F92FF",
-  accentSoft: "rgba(111,146,255,0.12)",
-  accentBorder: "rgba(111,146,255,0.25)",
+  accent: "#C084FC",
+  accentStrong: "#A855F7",
+  accentSoft: "rgba(192,132,252,0.18)",
+  accentBorder: "rgba(216,180,254,0.38)",
+
+  button: "#7C3AED",
+  buttonPressed: "#6D28D9",
 
   danger: "#FF7B7B",
   dangerSoft: "rgba(255,123,123,0.12)",
-  dangerBorder: "rgba(255,123,123,0.22)",
+  dangerBorder: "rgba(255,123,123,0.24)",
 
-  divider: "rgba(255,255,255,0.06)",
+  divider: "rgba(255,255,255,0.07)",
 };
 
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_PUBLIC_TOKEN!;
@@ -95,45 +102,23 @@ function formatTimeOnly(date: Date) {
 function inferCategoryFromRequest(request: PrivateSessionRequestRow | null) {
   const text = `${request?.message ?? ""} ${request?.learner_note ?? ""}`.toLowerCase();
 
-  if (
-    text.includes("piano") ||
-    text.includes("guitar") ||
-    text.includes("sing") ||
-    text.includes("music")
-  ) {
+  if (text.includes("piano") || text.includes("guitar") || text.includes("sing") || text.includes("music")) {
     return "music";
   }
 
-  if (
-    text.includes("cook") ||
-    text.includes("baking") ||
-    text.includes("food")
-  ) {
+  if (text.includes("cook") || text.includes("baking") || text.includes("food")) {
     return "cooking";
   }
 
-  if (
-    text.includes("spanish") ||
-    text.includes("french") ||
-    text.includes("english") ||
-    text.includes("language")
-  ) {
+  if (text.includes("spanish") || text.includes("french") || text.includes("english") || text.includes("language")) {
     return "language";
   }
 
-  if (
-    text.includes("paint") ||
-    text.includes("drawing") ||
-    text.includes("art")
-  ) {
+  if (text.includes("paint") || text.includes("drawing") || text.includes("art")) {
     return "art";
   }
 
-  if (
-    text.includes("craft") ||
-    text.includes("sew") ||
-    text.includes("knit")
-  ) {
+  if (text.includes("craft") || text.includes("sew") || text.includes("knit")) {
     return "crafts";
   }
 
@@ -150,9 +135,7 @@ function getFirstValidRequestedDate(request: PrivateSessionRequestRow | null): D
   for (const value of options) {
     if (!value) continue;
     const date = new Date(value);
-    if (!Number.isNaN(date.getTime())) {
-      return date;
-    }
+    if (!Number.isNaN(date.getTime())) return date;
   }
 
   const fallback = new Date();
@@ -164,12 +147,12 @@ function getFirstValidRequestedDate(request: PrivateSessionRequestRow | null): D
 function DateTimeField({
   label,
   value,
-  emoji,
+  icon,
   onPress,
 }: {
   label: string;
   value: string;
-  emoji: string;
+  icon: keyof typeof Ionicons.glyphMap;
   onPress: () => void;
 }) {
   return (
@@ -179,7 +162,7 @@ function DateTimeField({
         <Text style={styles.selectValue}>{value}</Text>
       </View>
 
-      <Text style={styles.selectIcon}>{emoji}</Text>
+      <Ionicons name={icon} size={18} color={COLORS.textMuted} />
     </Pressable>
   );
 }
@@ -269,10 +252,9 @@ export default function TeacherPrivateSessionRequestDetailScreen() {
         getMySessions(),
       ]);
 
-      const found =
-        Array.isArray(requestRows)
-          ? requestRows.find((item) => item.id === id) ?? null
-          : null;
+      const found = Array.isArray(requestRows)
+        ? requestRows.find((item) => item.id === id) ?? null
+        : null;
 
       setRequest(found);
 
@@ -300,7 +282,6 @@ export default function TeacherPrivateSessionRequestDetailScreen() {
 
       if (mostRecentReusableSession?.id) {
         const detail: SessionDetail = await getSessionById(mostRecentReusableSession.id);
-
         const inferredCategory = inferCategoryFromRequest(found);
 
         const nextCategory =
@@ -322,10 +303,8 @@ export default function TeacherPrivateSessionRequestDetailScreen() {
         }
 
         if (detail?.class?.description?.trim()) {
-setDescription((prev) => {
-  const fallback = detail.class?.description?.trim() || "";
-  return prev.trim() || fallback;
-});        }
+          setDescription((prev) => prev.trim() || detail.class?.description?.trim() || "");
+        }
 
         if (
           typeof detail?.price === "number" &&
@@ -335,16 +314,19 @@ setDescription((prev) => {
           setPrice(String(detail.price));
         }
 
-        if (detail?.rough_location?.trim()) {
-          const nextRough = detail.rough_location.trim();
-          setRoughLocation((prev) => prev.trim() || nextRough);
-          setAddressQuery((prev) => prev.trim() || nextRough);
-        }
+if (detail?.rough_location?.trim()) {
+  const nextRough = detail.rough_location.trim();
+
+  setRoughLocation((prev) => prev.trim() || nextRough);
+  setAddressQuery((prev) => prev.trim() || nextRough);
+
+  if (Number.isFinite(detail?.lat) && Number.isFinite(detail?.lng)) {
+    setSelectedAddress((prev) => prev || nextRough);
+  }
+}
 
         if (detail?.arrival_instructions?.trim()) {
-          setArrivalInstructions(
-            (prev) => prev.trim() || detail.arrival_instructions!.trim(),
-          );
+          setArrivalInstructions((prev) => prev.trim() || detail.arrival_instructions!.trim());
         }
 
         if (
@@ -393,10 +375,7 @@ setDescription((prev) => {
     if (!request) return;
 
     if (declineMessage.trim().length > 500) {
-      Alert.alert(
-        "Message too long",
-        "Decline message must be 500 characters or fewer.",
-      );
+      Alert.alert("Message too long", "Decline message must be 500 characters or fewer.");
       return;
     }
 
@@ -409,11 +388,10 @@ setDescription((prev) => {
       const rawMessage =
         e?.response?.data?.message ?? e?.message ?? "Could not decline request.";
 
-      const msg = Array.isArray(rawMessage)
-        ? rawMessage.join("\n")
-        : String(rawMessage);
-
-      Alert.alert("Error", msg);
+      Alert.alert(
+        "Error",
+        Array.isArray(rawMessage) ? rawMessage.join("\n") : String(rawMessage),
+      );
     } finally {
       setSaving(false);
     }
@@ -447,10 +425,10 @@ setDescription((prev) => {
       return;
     }
 
-    if (!selectedAddress || !Number.isFinite(parsedLat) || !Number.isFinite(parsedLng)) {
-      Alert.alert("Missing location", "Please search and select an address.");
-      return;
-    }
+if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLng)) {
+  Alert.alert("Missing location", "Please search and select an address.");
+  return;
+}
 
     if (!roughLocation.trim()) {
       Alert.alert("Missing location", "Please enter a rough location.");
@@ -481,18 +459,17 @@ setDescription((prev) => {
       Alert.alert("Accepted", "Private session created successfully.", [
         {
           text: "OK",
-          onPress: () =>  safeReplace("/(teacher)/sessions"),
+          onPress: () => safeReplace("/(teacher)/sessions"),
         },
       ]);
     } catch (e: any) {
       const rawMessage =
         e?.response?.data?.message ?? e?.message ?? "Could not accept request.";
 
-      const msg = Array.isArray(rawMessage)
-        ? rawMessage.join("\n")
-        : String(rawMessage);
-
-      Alert.alert("Accept failed", msg);
+      Alert.alert(
+        "Accept failed",
+        Array.isArray(rawMessage) ? rawMessage.join("\n") : String(rawMessage),
+      );
     } finally {
       setSaving(false);
     }
@@ -519,7 +496,7 @@ setDescription((prev) => {
             <>
               <View style={styles.hero}>
                 <View style={styles.heroBadge}>
-                  <Text style={styles.heroBadgeText}>Private 1:1</Text>
+                  <Text style={styles.heroBadgeText}>Teacher mode</Text>
                 </View>
 
                 <Text style={styles.heroTitle}>Private request</Text>
@@ -530,7 +507,13 @@ setDescription((prev) => {
 
               <View style={styles.cardOuter}>
                 <View style={styles.cardInner}>
-                  <Text style={styles.sectionTitle}>Learner request</Text>
+                  <View style={styles.sectionHeaderRow}>
+                    <View style={styles.iconCircle}>
+                      <Ionicons name="chatbubble-ellipses-outline" size={18} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.sectionTitle}>Learner request</Text>
+                  </View>
+
                   <Text style={styles.body}>{request.message}</Text>
 
                   {!!request.learner_note && (
@@ -548,12 +531,11 @@ setDescription((prev) => {
                         key={`${value}-${index}`}
                         onPress={() => {
                           const next = new Date(value);
-                          if (!Number.isNaN(next.getTime())) {
-                            setStartDate(next);
-                          }
+                          if (!Number.isNaN(next.getTime())) setStartDate(next);
                         }}
                         style={styles.requestedTimePill}
                       >
+                        <Ionicons name="calendar-outline" size={14} color={COLORS.text} />
                         <Text style={styles.requestedTimePillText}>
                           {formatDate(value)}
                         </Text>
@@ -567,16 +549,24 @@ setDescription((prev) => {
                 <>
                   <View style={styles.cardOuter}>
                     <View style={styles.cardInner}>
-                      <Text style={styles.sectionTitle}>Create private session</Text>
-                      <Text style={styles.sectionSubtitle}>
-                        Turn this request into a paid private session in the app.
-                      </Text>
+                      <View style={styles.sectionHeaderRow}>
+                        <View style={styles.iconCircle}>
+                          <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.sectionTitle}>Create private session</Text>
+                          <Text style={styles.sectionSubtitle}>
+                            Turn this request into a paid private session in the app.
+                          </Text>
+                        </View>
+                      </View>
 
                       <Text style={styles.label}>Title</Text>
                       <TextInput
                         value={title}
-                        onChangeText={setTitle}
-                        placeholder="Private 1:1 session"
+          onChangeText={setTitle}
+          autoCapitalize="words"  
+                     placeholder="Private 1:1 session"
                         placeholderTextColor={COLORS.textMuted}
                         style={styles.input}
                       />
@@ -585,9 +575,7 @@ setDescription((prev) => {
                       {loadingCategories ? (
                         <View style={styles.loadingCategoriesWrap}>
                           <ActivityIndicator color={COLORS.accent} />
-                          <Text style={styles.loadingCategoriesText}>
-                            Loading categories…
-                          </Text>
+                          <Text style={styles.loadingCategoriesText}>Loading categories…</Text>
                         </View>
                       ) : (
                         <View style={styles.categoryList}>
@@ -620,8 +608,9 @@ setDescription((prev) => {
                       <Text style={styles.label}>Description</Text>
                       <TextInput
                         value={description}
-                        onChangeText={setDescription}
-                        placeholder="What will you cover in this session?"
+          onChangeText={setDescription}
+          autoCapitalize="words"     
+                           placeholder="What will you cover in this session?"
                         placeholderTextColor={COLORS.textMuted}
                         multiline
                         style={styles.textArea}
@@ -642,14 +631,14 @@ setDescription((prev) => {
                         <DateTimeField
                           label="Session date"
                           value={formatDateOnly(startDate)}
-                          emoji="📅"
+                          icon="calendar-outline"
                           onPress={() => setShowDatePicker(true)}
                         />
 
                         <DateTimeField
                           label="Session time"
                           value={formatTimeOnly(startDate)}
-                          emoji="⏰"
+                          icon="time-outline"
                           onPress={() => setShowTimePicker(true)}
                         />
                       </View>
@@ -697,11 +686,8 @@ setDescription((prev) => {
                                 setAddressResults([]);
 
                                 const rough =
-                                  item.place_name
-                                    .split(",")
-                                    .slice(0, 2)
-                                    .join(",")
-                                    .trim() || item.place_name;
+                                  item.place_name.split(",").slice(0, 2).join(",").trim() ||
+                                  item.place_name;
 
                                 setRoughLocation(rough);
                               }}
@@ -717,16 +703,15 @@ setDescription((prev) => {
                       ) : null}
 
                       {selectedAddress ? (
-                        <Text style={styles.helperInline}>
-                          Selected: {selectedAddress}
-                        </Text>
+                        <Text style={styles.helperInline}>Selected: {selectedAddress}</Text>
                       ) : null}
 
                       <Text style={styles.label}>Rough location</Text>
                       <TextInput
                         value={roughLocation}
-                        onChangeText={setRoughLocation}
-                        placeholder="Ranelagh, Dublin 6"
+          onChangeText={setRoughLocation}
+          autoCapitalize="sentences"        
+                           placeholder="Ranelagh, Dublin 6"
                         placeholderTextColor={COLORS.textMuted}
                         style={styles.input}
                       />
@@ -734,8 +719,9 @@ setDescription((prev) => {
                       <Text style={styles.label}>Arrival instructions</Text>
                       <TextInput
                         value={arrivalInstructions}
-                        onChangeText={setArrivalInstructions}
-                        placeholder="Blue door, ring once..."
+          onChangeText={setArrivalInstructions}
+          autoCapitalize="sentences"  
+                                  placeholder="Blue door, ring once..."
                         placeholderTextColor={COLORS.textMuted}
                         style={styles.input}
                       />
@@ -774,8 +760,9 @@ setDescription((prev) => {
                       <Pressable
                         onPress={handleAccept}
                         disabled={saving}
-                        style={[
+                        style={({ pressed }) => [
                           styles.primaryButton,
+                          pressed && !saving && styles.primaryButtonPressed,
                           saving && styles.buttonDisabled,
                         ]}
                       >
@@ -786,18 +773,26 @@ setDescription((prev) => {
                     </View>
                   </View>
 
-                  <View style={styles.cardOuter}>
+                  <View style={styles.dangerCardOuter}>
                     <View style={styles.cardInner}>
-                      <Text style={[styles.sectionTitle, { color: COLORS.danger }]}>
-                        Decline request
-                      </Text>
-                      <Text style={styles.sectionSubtitle}>
-                        You can optionally send a short message explaining why.
-                      </Text>
+                      <View style={styles.sectionHeaderRow}>
+                        <View style={styles.dangerIconCircle}>
+                          <Ionicons name="close-circle-outline" size={18} color="#FFFFFF" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.sectionTitle, { color: COLORS.danger }]}>
+                            Decline request
+                          </Text>
+                          <Text style={styles.sectionSubtitle}>
+                            Optionally send a short message explaining why.
+                          </Text>
+                        </View>
+                      </View>
 
                       <TextInput
                         value={declineMessage}
                         onChangeText={setDeclineMessage}
+                        autoCapitalize="sentences"
                         placeholder="Optional message to learner"
                         placeholderTextColor={COLORS.textMuted}
                         multiline
@@ -805,15 +800,14 @@ setDescription((prev) => {
                         style={styles.declineTextArea}
                       />
 
-                      <Text style={styles.charCount}>
-                        {declineMessage.length}/500
-                      </Text>
+                      <Text style={styles.charCount}>{declineMessage.length}/500</Text>
 
                       <Pressable
                         onPress={handleDecline}
                         disabled={saving}
-                        style={[
+                        style={({ pressed }) => [
                           styles.declineButton,
+                          pressed && !saving && styles.declineButtonPressed,
                           saving && styles.buttonDisabled,
                         ]}
                       >
@@ -834,9 +828,7 @@ setDescription((prev) => {
                     {!!request.teacher_response_message && (
                       <>
                         <Text style={styles.sectionTitle}>Teacher response</Text>
-                        <Text style={styles.body}>
-                          {request.teacher_response_message}
-                        </Text>
+                        <Text style={styles.body}>{request.teacher_response_message}</Text>
                       </>
                     )}
                   </View>
@@ -896,6 +888,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 24,
     paddingBottom: 40,
+    flexGrow: 1,
   },
 
   hero: {
@@ -916,13 +909,14 @@ const styles = StyleSheet.create({
   heroBadgeText: {
     color: COLORS.text,
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   heroTitle: {
     color: COLORS.text,
     fontSize: 30,
-    fontWeight: "800",
+    fontWeight: "900",
+    lineHeight: 34,
     marginBottom: 8,
   },
 
@@ -936,6 +930,15 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1.2,
     borderColor: COLORS.borderStrong,
+    backgroundColor: COLORS.surface,
+    marginBottom: 14,
+    overflow: "hidden",
+  },
+
+  dangerCardOuter: {
+    borderRadius: 24,
+    borderWidth: 1.2,
+    borderColor: COLORS.dangerBorder,
     backgroundColor: COLORS.surface,
     marginBottom: 14,
     overflow: "hidden",
@@ -957,9 +960,38 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 12,
+  },
+
+  iconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: COLORS.accentSoft,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  dangerIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: COLORS.dangerSoft,
+    borderWidth: 1,
+    borderColor: COLORS.dangerBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   sectionTitle: {
     color: COLORS.text,
-    fontWeight: "800",
+    fontWeight: "900",
     fontSize: 18,
     marginBottom: 8,
   },
@@ -973,16 +1005,17 @@ const styles = StyleSheet.create({
 
   body: {
     color: COLORS.textSoft,
-    lineHeight: 20,
-    marginBottom: 10,
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 12,
   },
 
   label: {
     color: COLORS.text,
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
     marginBottom: 8,
-    marginTop: 10,
+    marginTop: 12,
   },
 
   inputStack: {
@@ -1057,11 +1090,7 @@ const styles = StyleSheet.create({
   selectValue: {
     color: COLORS.text,
     fontSize: 15,
-    fontWeight: "700",
-  },
-
-  selectIcon: {
-    fontSize: 18,
+    fontWeight: "800",
   },
 
   requestedTimesWrap: {
@@ -1076,12 +1105,16 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
 
   requestedTimePillText: {
     color: COLORS.text,
-    fontWeight: "700",
+    fontWeight: "800",
     lineHeight: 18,
+    flex: 1,
   },
 
   loadingCategoriesWrap: {
@@ -1117,7 +1150,7 @@ const styles = StyleSheet.create({
 
   categoryChipText: {
     color: COLORS.text,
-    fontWeight: "700",
+    fontWeight: "800",
   },
 
   categoryChipTextSelected: {
@@ -1173,7 +1206,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: COLORS.accent,
+    backgroundColor: COLORS.button,
     borderWidth: 2,
     borderColor: "#FFFFFF",
   },
@@ -1181,15 +1214,20 @@ const styles = StyleSheet.create({
   primaryButton: {
     minHeight: 50,
     borderRadius: 16,
-    backgroundColor: COLORS.accent,
+    backgroundColor: COLORS.button,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 16,
   },
 
+  primaryButtonPressed: {
+    backgroundColor: COLORS.buttonPressed,
+  },
+
   primaryButtonText: {
     color: "#fff",
-    fontWeight: "800",
+    fontWeight: "900",
+    fontSize: 15,
   },
 
   declineButton: {
@@ -1203,25 +1241,14 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 
+  declineButtonPressed: {
+    opacity: 0.86,
+  },
+
   declineButtonText: {
     color: COLORS.danger,
-    fontWeight: "800",
-  },
-
-  secondaryButton: {
-    minHeight: 50,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surfaceSoft,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 10,
-  },
-
-  secondaryButtonText: {
-    color: COLORS.text,
-    fontWeight: "800",
+    fontWeight: "900",
+    fontSize: 15,
   },
 
   buttonDisabled: {

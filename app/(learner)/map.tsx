@@ -5,6 +5,8 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import Mapbox from "@rnmapbox/maps";
 import { useLocalSearchParams, usePathname } from "expo-router";
+import * as Location from "expo-location";
+import { mediaUrl } from "@/src/utils/mediaUrl";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -81,7 +83,7 @@ const MAP_STYLE_URL = "mapbox://styles/mapbox/dark-v11";
 const MARKER_FETCH_PAD = 0.05;
 const NEARBY_SUGGESTION_PAD = 2.0;
 const SILENT_REFRESH_MS = 30000;
-
+const FALLBACK_LOCATION: [number, number] = [-8.4863, 53.2707];
 
 const PRIMARY_CATEGORY_SLUGS = [
   "art",
@@ -344,8 +346,7 @@ function TeacherMarker({
       >
         <View style={styles.customMarkerAvatarInner}>
           {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.customMarkerAvatarImage} />
-          ) : (
+<Image source={{ uri: mediaUrl(avatarUrl)! }} style={styles.customMarkerAvatarImage} />          ) : (
             <View style={styles.customMarkerAvatarFallback}>
               <Ionicons name="person" size={26} color="#dbe7ff" />
             </View>
@@ -382,7 +383,6 @@ const isFetchingMapRef = useRef(false);
   const hasFocusSessionParam =
     typeof params.focusSessionId === "string" && !!params.focusSessionId;
 
-  const hasTeacherProfile = authStore((s) => s.hasTeacherProfile);
 
   const currentZoomRef = useRef<number>(INITIAL_ZOOM);
   const requestSeqRef = useRef(0);
@@ -445,6 +445,98 @@ const isFetchingMapRef = useRef(false);
     () => sessionsToFeatureCollection(sessions),
     [sessions],
   );
+
+useEffect(() => {
+  let alive = true;
+
+  async function requestLocation() {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (!alive) return;
+
+      if (status !== "granted") {
+        setLocError("Location permission denied");
+        setUserLocation(FALLBACK_LOCATION);
+        setIsInitialLocationResolved(true);
+
+        if (!hasHydratedView || !savedMapCenter) {
+          cameraRef.current?.setCamera({
+            centerCoordinate: FALLBACK_LOCATION,
+            zoomLevel: 13.5,
+            animationDuration: 0,
+          });
+        }
+
+        return;
+      }
+
+      const current = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      if (!alive) return;
+
+      const nextLocation: [number, number] = [
+        current.coords.longitude,
+        current.coords.latitude,
+      ];
+
+      setUserLocation(nextLocation);
+      setLocError(null);
+      setIsInitialLocationResolved(true);
+
+      if (
+        !hasCenteredOnInitialLocationRef.current &&
+        !hasFocusSessionParam &&
+        !hasHydratedView &&
+        !savedMapCenter
+      ) {
+        hasCenteredOnInitialLocationRef.current = true;
+
+        cameraRef.current?.setCamera({
+          centerCoordinate: nextLocation,
+          zoomLevel: 13.5,
+          animationDuration: 0,
+        });
+      }
+    } catch (e) {
+      console.log("requestLocation error", e);
+
+      if (!alive) return;
+
+      setLocError("Could not get location");
+      setUserLocation(FALLBACK_LOCATION);
+      setIsInitialLocationResolved(true);
+
+      if (!hasHydratedView || !savedMapCenter) {
+        cameraRef.current?.setCamera({
+          centerCoordinate: FALLBACK_LOCATION,
+          zoomLevel: 13.5,
+          animationDuration: 0,
+        });
+      }
+    }
+  }
+
+  requestLocation();
+
+  return () => {
+    alive = false;
+  };
+}, [hasFocusSessionParam, hasHydratedView, savedMapCenter]);
+
+useEffect(() => {
+  const timeout = setTimeout(() => {
+    setIsInitialLocationResolved(true);
+
+    if (!userLocation) {
+      setUserLocation(FALLBACK_LOCATION);
+    }
+  }, 10000);
+
+  return () => clearTimeout(timeout);
+}, []);
 
   const primaryCategoriesToShow = useMemo(() => {
     return PRIMARY_CATEGORY_SLUGS
@@ -567,33 +659,57 @@ const isFetchingMapRef = useRef(false);
     }
   }, []);
 
-  const loadUpcomingBookingsCount = useCallback(async () => {
-    try {
-      const res = await api.get("/bookings/me");
-      const rows: BookingRow[] = Array.isArray(res.data) ? res.data : [];
+const loadUpcomingBookingsCount = useCallback(async () => {
+  try {
+    const res = await api.get("/bookings/me");
+    const rows: BookingRow[] = Array.isArray(res.data) ? res.data : [];
 
-      const upcomingCount = rows.filter((booking) => {
-        const status = booking.status ?? "";
-        const startTime =
-          booking.session_start_time ??
-          booking.start_time ??
-          booking.session?.start_time;
+    const upcomingCount = rows.filter((booking: any) => {
+      const status =
+        booking.booking_status ??
+        booking.status ??
+        "";
 
-        if (!startTime) return false;
+      const startTime =
+        booking.session_start_time ??
+        booking.start_time ??
+        booking.session?.start_time;
 
-        const isUpcoming = new Date(startTime).getTime() > Date.now();
-        const isActiveStatus =
-          status === "PENDING" || status === "CONFIRMED" || status === "";
+      if (!startTime) return false;
 
-        return isUpcoming && isActiveStatus;
-      }).length;
+      const startMs = new Date(startTime).getTime();
 
-      setUpcomingBookingsCount(upcomingCount);
-    } catch (e) {
-      console.log("loadUpcomingBookingsCount error", e);
-      setUpcomingBookingsCount(0);
-    }
-  }, []);
+      if (Number.isNaN(startMs)) return false;
+
+      const isUpcoming = startMs > Date.now();
+
+      const isConfirmed = status === "CONFIRMED";
+
+      const createdAt =
+        booking.booking_created_at ??
+        booking.created_at;
+
+      let isPendingNotExpired = false;
+
+      if (status === "PENDING" && createdAt) {
+        const createdMs = new Date(createdAt).getTime();
+
+        if (!Number.isNaN(createdMs)) {
+          const expiresAt = createdMs + 15 * 60 * 1000;
+
+          isPendingNotExpired = Date.now() < expiresAt;
+        }
+      }
+
+      return isUpcoming && (isConfirmed || isPendingNotExpired);
+    }).length;
+
+    setUpcomingBookingsCount(upcomingCount);
+  } catch (e) {
+    console.log("loadUpcomingBookingsCount error", e);
+    setUpcomingBookingsCount(0);
+  }
+}, []);
 
   const openSessionSheet = useCallback((sessionId: string) => {
     setSelectedSessionId(sessionId);
@@ -610,14 +726,7 @@ const isFetchingMapRef = useRef(false);
     setSheetSessionId(null);
   }, []);
 
-  const handleOpenTeach = useCallback(() => {
-    if (hasTeacherProfile) {
-      safePush("/(teacher)/dashboard");
-      return;
-    }
 
-    safePush("/(teacher)/profile");
-  }, [hasTeacherProfile]);
 
   useFocusEffect(
     useCallback(() => {
@@ -649,72 +758,55 @@ const isFetchingMapRef = useRef(false);
     })();
   }, []);
 
-  const fetchNearbySuggestions = useCallback(
-    async (bbox: BBox, category: CategoryFilter) => {
-      try {
-        const qs = new URLSearchParams({
-          north: String(bbox.north),
-          south: String(bbox.south),
-          east: String(bbox.east),
-          west: String(bbox.west),
-        });
+const fetchNearbySuggestions = useCallback(
+  async (bbox: BBox, category: CategoryFilter) => {
+    try {
+      const centerLat = (bbox.north + bbox.south) / 2;
+      const centerLng = (bbox.east + bbox.west) / 2;
 
-        if (category !== "all") {
-          qs.append("category", category);
-        }
+      const qs = new URLSearchParams({
+        lat: String(centerLat),
+        lng: String(centerLng),
+        limit: "3",
+      });
 
-        const res = await fetch(`${API_BASE_URL}/sessions/map?${qs.toString()}`);
-        if (!res.ok) {
-          setNearbySuggestions([]);
-          return;
-        }
-
-        const data = await res.json();
-        const rows = Array.isArray(data) ? data : [];
-
-        const centerLat = (bbox.north + bbox.south) / 2;
-        const centerLng = (bbox.east + bbox.west) / 2;
-
-        const sorted = rows
-          .map((row: any) => {
-            const rowLat = Number(row.lat);
-            const rowLng = Number(row.lng);
-
-            const distance_meters = Math.sqrt(
-              Math.pow((rowLat - centerLat) * 111_000, 2) +
-              Math.pow(
-                (rowLng - centerLng) *
-                111_000 *
-                Math.cos((centerLat * Math.PI) / 180),
-                2,
-              ),
-            );
-
-            return {
-              session_id: String(row.session_id),
-              lat: rowLat,
-              lng: rowLng,
-              title: row.title ?? "Session",
-              category: row.category ?? "other",
-              price: Number(row.price ?? 0),
-              start_time: row.start_time,
-              teacher_name: row.teacher_name ?? "Teacher",
-              teacher_avatar_url: row.teacher_avatar_url ?? null,
-              distance_meters: Math.round(distance_meters),
-            };
-          })
-          .filter((row) => row.distance_meters <= 20_000)
-          .sort((a, b) => a.distance_meters - b.distance_meters)
-          .slice(0, 3);
-
-        setNearbySuggestions(sorted);
-      } catch (e) {
-        console.log("fetchNearbySuggestions error", e);
-        setNearbySuggestions([]);
+      if (category !== "all") {
+        qs.append("category", category);
       }
-    },
-    [],
-  );
+
+      const res = await fetch(`${API_BASE_URL}/sessions/nearby?${qs.toString()}`);
+
+      if (!res.ok) {
+        setNearbySuggestions([]);
+        return;
+      }
+
+      const data = await res.json();
+      const rows = Array.isArray(data) ? data : [];
+
+      setNearbySuggestions(
+        rows
+          .map((row: any) => ({
+            session_id: String(row.session_id),
+            lat: Number(row.lat),
+            lng: Number(row.lng),
+            title: row.title ?? "Session",
+            category: row.category ?? "other",
+            price: Number(row.price ?? 0),
+            start_time: row.start_time,
+            teacher_name: row.teacher_name ?? "Teacher",
+            teacher_avatar_url: row.teacher_avatar_url ?? null,
+            distance_meters: Number(row.distance_meters ?? 0),
+          }))
+          .filter((row) => row.distance_meters <= 20_000),
+      );
+    } catch (e) {
+      console.log("fetchNearbySuggestions error", e);
+      setNearbySuggestions([]);
+    }
+  },
+  [],
+);
 
   const fetchSessionsForBBox = useCallback(
     async (
@@ -1295,44 +1387,56 @@ const handleDismissMapExplainCard = useCallback(() => {
           rotateEnabled={false}
           pitchEnabled={false}
         >
-          <Mapbox.Camera
-            ref={(r) => {
-              cameraRef.current = r;
-            }}
-            defaultSettings={{
-              centerCoordinate: userLocation ?? [-73.9857, 40.7484],
-              zoomLevel: 13.5,
-              pitch: 0,
-              heading: 0,
-            }}
-          />
+<Mapbox.Camera
+  ref={(r) => {
+    cameraRef.current = r;
+  }}
+  defaultSettings={{
+    centerCoordinate:
+      hasHydratedView && savedMapCenter
+        ? savedMapCenter
+        : userLocation ?? FALLBACK_LOCATION,
+    zoomLevel:
+      hasHydratedView && typeof savedMapZoom === "number"
+        ? savedMapZoom
+        : 13.5,
+    pitch: 0,
+    heading: 0,
+  }}
+/>
 
           <Mapbox.UserLocation
             visible
             androidRenderMode="gps"
             showsUserHeadingIndicator={false}
-            onUpdate={(location) => {
-              const lng = location?.coords?.longitude;
-              const lat = location?.coords?.latitude;
+onUpdate={(location) => {
+const lng = location?.coords?.longitude;
+const lat = location?.coords?.latitude;
 
-              if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
 
-              const nextLocation: [number, number] = [lng, lat];
+const nextLocation: [number, number] = [lng, lat];
 
-              setUserLocation(nextLocation);
-              setLocError(null);
-              setIsInitialLocationResolved(true);
+setUserLocation(nextLocation);
+setLocError(null);
 
-              if (!hasCenteredOnInitialLocationRef.current && !hasFocusSessionParam) {
-                hasCenteredOnInitialLocationRef.current = true;
+// IMPORTANT
+setIsInitialLocationResolved(true);
 
-                cameraRef.current?.setCamera({
-                  centerCoordinate: nextLocation,
-                  zoomLevel: 13.5,
-                  animationDuration: 0,
-                });
-              }
-            }}
+if (!hasCenteredOnInitialLocationRef.current) {
+hasCenteredOnInitialLocationRef.current = true;
+
+
+cameraRef.current?.setCamera({
+  centerCoordinate: nextLocation,
+  zoomLevel: 13.5,
+  animationDuration: 0,
+});
+
+
+}
+}}
+
           />
 
           {showClusterSource ? (
@@ -1437,8 +1541,8 @@ const handleDismissMapExplainCard = useCallback(() => {
               })}
         </Mapbox.MapView>
 
-        {!userLocation ? (
-          <View style={styles.mapLoadingOverlay}>
+{!isInitialLocationResolved ? (
+            <View style={styles.mapLoadingOverlay}>
             <ActivityIndicator color={COLORS.accent} />
             <Text style={styles.loadingText}>Getting your location…</Text>
           </View>
@@ -1593,6 +1697,26 @@ const handleDismissMapExplainCard = useCallback(() => {
               </Pressable>
             </Animated.View>
           ) : null}
+          {shouldShowNearbyCompactList ? (
+  <View style={styles.nearbySuggestionsCompact}>
+    <Text style={styles.nearbySuggestionsTitle}>
+      Nearby sessions within 20 km
+    </Text>
+
+    {nearbySuggestions.map((item) => (
+      <Pressable
+        key={item.session_id}
+        onPress={() => handleFocusNearbySession(item)}
+        style={styles.nearbyCompactCard}
+      >
+        <Text style={styles.nearbyCompactTitle}>{item.title}</Text>
+        <Text style={styles.nearbyCompactMeta}>
+          €{item.price} · {formatDistance(item.distance_meters)}
+        </Text>
+      </Pressable>
+    ))}
+  </View>
+) : null}
         </View>
 
 

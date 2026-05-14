@@ -27,3 +27,15 @@ export async function createCheckoutSession(bookingId: string) {
     checkoutSessionId: string;
   };
 }
+
+export async function syncCheckoutStatus(bookingId: string) {
+  const res = await api.post(`/payments/checkout/${bookingId}/sync`);
+
+  return res.data as {
+    status: string;
+    bookingId: string;
+    message?: string;
+    stripeStatus?: string;
+    paymentStatus?: string;
+  };
+}

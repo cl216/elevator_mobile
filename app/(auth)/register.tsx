@@ -1,12 +1,12 @@
-import * as Linking from "expo-linking";
-import { useState } from "react";
-import { Alert, Pressable, Text, TextInput } from "react-native";
-import { api } from "../../src/api/client";
-import { safeReplace } from "@/src/utils/safeRouter";
 import AuthScreenShell, {
   AUTH_COLORS as COLORS,
 } from "@/src/components/auth/AuthScreenShell";
 import { authStyles as styles } from "@/src/components/auth/authStyles";
+import { safeReplace } from "@/src/utils/safeRouter";
+import * as Linking from "expo-linking";
+import { useState } from "react";
+import { Alert, Pressable, Text, TextInput } from "react-native";
+import { api } from "../../src/api/client";
 
 export default function RegisterScreen() {
   const [firstName, setFirstName] = useState("");
@@ -91,7 +91,7 @@ export default function RegisterScreen() {
       <TextInput
         value={email}
         onChangeText={setEmail}
-        autoCapitalize="none"
+        autoCapitalize="sentences"
         keyboardType="email-address"
         placeholder="Email"
         placeholderTextColor={COLORS.textMuted}

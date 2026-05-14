@@ -1,18 +1,20 @@
+import { safeReplace } from "@/src/utils/safeRouter";
+import { autoCapitalize } from "@/src/utils/text";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { getApprovedCategories } from "../../../../src/api/categories";
 import {
-    getClassById,
-    updateClass,
+  getClassById,
+  updateClass,
 } from "../../../../src/api/classes";
 import { uiToastStore } from "../../../../src/store/uiToast.store";
 
@@ -168,7 +170,8 @@ export default function EditClassScreen() {
         <TextInput
           value={title}
           onChangeText={setTitle}
-          placeholder="Watercolour Basics"
+          autoCapitalize="words"  
+         placeholder="Watercolour Basics"
           style={{
             borderWidth: 1,
             borderColor: "rgba(0,0,0,0.12)",
@@ -233,7 +236,8 @@ export default function EditClassScreen() {
         <TextInput
           value={description}
           onChangeText={setDescription}
-          multiline
+          autoCapitalize="sentences"  
+         multiline
           placeholder="Tell learners what they’ll do in this class."
           style={{
             minHeight: 130,
@@ -253,7 +257,7 @@ export default function EditClassScreen() {
           value={imageUrl1}
           onChangeText={setImageUrl1}
           placeholder="https://example.com/class-photo-1.jpg"
-          autoCapitalize="none"
+          autoCapitalize="sentences"
           autoCorrect={false}
           style={{
             borderWidth: 1,
@@ -271,7 +275,7 @@ export default function EditClassScreen() {
           value={imageUrl2}
           onChangeText={setImageUrl2}
           placeholder="https://example.com/class-photo-2.jpg"
-          autoCapitalize="none"
+          autoCapitalize="sentences"
           autoCorrect={false}
           style={{
             borderWidth: 1,
@@ -289,7 +293,7 @@ export default function EditClassScreen() {
           value={imageUrl3}
           onChangeText={setImageUrl3}
           placeholder="https://example.com/class-photo-3.jpg"
-          autoCapitalize="none"
+          autoCapitalize="sentences"
           autoCorrect={false}
           style={{
             borderWidth: 1,

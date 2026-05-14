@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -36,9 +37,6 @@ const COLORS = {
   accent: "#6F92FF",
   accentSoft: "rgba(111,146,255,0.12)",
   accentBorder: "rgba(111,146,255,0.25)",
-
-  button: "#3F6AE0",
-  buttonSecondary: "#121A2C",
 
   unreadDot: "#6F92FF",
   divider: "rgba(255,255,255,0.06)",
@@ -125,7 +123,7 @@ export default function NotificationsScreen() {
   }
 
   useEffect(() => {
-    loadNotifications();
+    void loadNotifications();
   }, []);
 
   const unreadCount = useMemo(() => {
@@ -181,15 +179,34 @@ export default function NotificationsScreen() {
 
     const bookingId = item.payload?.booking_id;
     const sessionId = item.payload?.session_id;
+    const privateSessionRequestId = item.payload?.private_session_request_id;
     const type = item.type;
+
+if (type === "private_session_request_created") {
+  if (privateSessionRequestId) {
+    safePush({
+      pathname: "/(teacher)/private-session-requests/[id]",
+      params: {
+        id: String(privateSessionRequestId),
+      },
+    });
+    return;
+  }
+
+  Alert.alert(
+    "Could not open request",
+    "This notification is missing the private request ID.",
+  );
+  return;
+}
 
     if (type === "review_reminder") {
       if (bookingId) {
-         safePush(`/(learner)/review/${bookingId}`);
+        safePush(`/(learner)/review/${bookingId}`);
         return;
       }
 
-       safeReplace("/(learner)/bookings");
+      safeReplace("/(learner)/bookings");
       return;
     }
 
@@ -201,11 +218,11 @@ export default function NotificationsScreen() {
       type === "session_reminder_1h"
     ) {
       if (bookingId) {
-         safePush(`/(learner)/booking/${bookingId}`);
+        safePush(`/(learner)/booking/${bookingId}`);
         return;
       }
 
-       safeReplace("/(learner)/bookings");
+      safeReplace("/(learner)/bookings");
       return;
     }
 
@@ -213,14 +230,18 @@ export default function NotificationsScreen() {
       return;
     }
 
-    if (type === "private_session_request_accepted") {
-      if (sessionId) {
-         safePush(`/(modal)/session/${sessionId}`);
-        return;
-      }
+if (type === "private_session_request_accepted") {
+  if (sessionId) {
+    safePush(`/(modal)/booking/${sessionId}`);
+    return;
+  }
 
-      return;
-    }
+  Alert.alert(
+    "Could not open session",
+    "This notification is missing the session ID.",
+  );
+  return;
+}
 
     if (
       type === "new_booking_started" ||
@@ -230,17 +251,16 @@ export default function NotificationsScreen() {
       type === "teacher_session_reminder_1h"
     ) {
       if (sessionId) {
-         safeReplace(`/(teacher)/sessions/${sessionId}`);
+        safeReplace(`/(teacher)/sessions/${sessionId}`);
         return;
       }
 
-       safeReplace("/(teacher)/sessions");
+      safeReplace("/(teacher)/sessions");
       return;
     }
 
-    if (sessionId) {
-       safePush(`/(modal)/session/${sessionId}`);
-    }
+if (sessionId) {
+  safePush(`/(modal)/booking/${sessionId}`);}
   }
 
   async function handleOpenMap(item: AppNotification) {
@@ -249,7 +269,7 @@ export default function NotificationsScreen() {
     const sessionId = item.payload?.session_id;
 
     if (sessionId) {
-       safePush({
+      safePush({
         pathname: "/(learner)/map",
         params: {
           focusSessionId: String(sessionId),
@@ -279,8 +299,10 @@ export default function NotificationsScreen() {
   }
 
   function renderNotificationCard(item: AppNotification) {
-    const hasSession = !!item.payload?.session_id;
-    const isPrivateRequestAccepted =
+const hasSession =
+  !!item.payload?.session_id &&
+  item.type !== "private_session_request_accepted";
+      const isPrivateRequestAccepted =
       item.type === "private_session_request_accepted";
     const isPrivateRequestDeclined =
       item.type === "private_session_request_declined";

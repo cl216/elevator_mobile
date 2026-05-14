@@ -4,6 +4,9 @@ import Mapbox from "@rnmapbox/maps";
 import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
+import { mediaUrl } from "@/src/utils/mediaUrl";
+import { autoCapitalize } from "@/src/utils/text";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -24,7 +27,7 @@ import { getApprovedCategories } from "../../../src/api/categories";
 import { api } from "../../../src/api/client";
 import {
   createSession,
-  getSessionById,
+  getMySessionById,
   updateSession,
 } from "../../../src/api/sessions";
 import { uploadImage } from "../../../src/api/uploads";
@@ -60,24 +63,26 @@ const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_PUBLIC_TOKEN!;
 Mapbox.setAccessToken(MAPBOX_TOKEN);
 
 const COLORS = {
-  bg: "#05070F",
-  surface: "#0D1424",
-  surfaceSoft: "#121A2C",
+  bg: "#12051F",
+  surface: "#241032",
+  surfaceSoft: "#321447",
+  surfaceDeep: "#0B0314",
 
-  text: "#F5F8FF",
-  textSoft: "rgba(222,230,247,0.72)",
-  textMuted: "rgba(222,230,247,0.52)",
+  text: "#FDF7FF",
+  textSoft: "rgba(244,229,255,0.76)",
+  textMuted: "rgba(244,229,255,0.52)",
 
-  border: "rgba(110,145,255,0.12)",
-  borderStrong: "rgba(110,145,255,0.28)",
+  border: "rgba(216,180,254,0.16)",
+  borderStrong: "rgba(216,180,254,0.42)",
 
-  accent: "#6F92FF",
-  accentSoft: "rgba(111,146,255,0.12)",
-  accentBorder: "rgba(111,146,255,0.25)",
+  accent: "#C084FC",
+  accentStrong: "#A855F7",
+  accentSoft: "rgba(192,132,252,0.18)",
+  accentBorder: "rgba(216,180,254,0.38)",
 
-  button: "#3F6AE0",
-  buttonPressed: "#355CC2",
-  buttonSecondary: "#121A2C",
+  button: "#7C3AED",
+  buttonPressed: "#6D28D9",
+  buttonSecondary: "#321447",
 
   warningBg: "rgba(255, 193, 7, 0.12)",
   warningBorder: "rgba(255, 193, 7, 0.22)",
@@ -86,7 +91,7 @@ const COLORS = {
   successBg: "rgba(80, 200, 120, 0.14)",
   successBorder: "rgba(80, 200, 120, 0.28)",
 
-  divider: "rgba(255,255,255,0.06)",
+  divider: "rgba(255,255,255,0.07)",
 };
 
 function FieldCard({ title, subtitle, children }: FieldCardProps) {
@@ -101,6 +106,11 @@ function FieldCard({ title, subtitle, children }: FieldCardProps) {
   );
 }
 
+function previewUri(uri?: string | null) {
+  if (!uri) return null;
+  return uri.startsWith("file:") ? uri : mediaUrl(uri);
+}
+
 type CreateSessionScreenProps = {
   mode?: "create" | "edit";
   sessionId?: string;
@@ -110,8 +120,6 @@ export default function CreateSessionScreen({
   mode = "create",
   sessionId,
 }: CreateSessionScreenProps) {
-
-
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<string>("");
 
@@ -140,6 +148,7 @@ export default function CreateSessionScreen({
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
   const [roughLocation, setRoughLocation] = useState("");
+  const [buildingDetail, setBuildingDetail] = useState("");
   const [arrivalInstructions, setArrivalInstructions] = useState("");
 
   const [addressQuery, setAddressQuery] = useState("");
@@ -194,15 +203,23 @@ export default function CreateSessionScreen({
       quality: 0.55,
     });
 
-    if (!result.canceled && result.assets?.[0]?.uri) {
-      setter(result.assets[0].uri);
-    }
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+
+    const sourceUri = result.assets[0].uri;
+    const extension = sourceUri.split(".").pop() || "jpg";
+    const safeUri = `${FileSystem.cacheDirectory}session-${Date.now()}.${extension}`;
+
+    await FileSystem.copyAsync({
+      from: sourceUri,
+      to: safeUri,
+    });
+
+    setter(safeUri);
   }
 
   useEffect(() => {
     loadCategories();
   }, []);
-
 
   useEffect(() => {
     if (mode !== "edit" || !sessionId) return;
@@ -213,7 +230,9 @@ export default function CreateSessionScreen({
       try {
         setLoadingSession(true);
 
-        const data = await getSessionById(sessionId);
+const data = await getMySessionById(sessionId);
+        console.log("EDIT SESSION DATA:", data);
+        console.log("EDIT SESSION IMAGE URLS:", data?.image_urls);
 
         if (!alive) return;
 
@@ -248,7 +267,19 @@ export default function CreateSessionScreen({
         );
 
         setRoughLocation(data?.rough_location ?? "");
-        setArrivalInstructions(data?.arrival_instructions ?? "");
+
+        const existingArrivalInstructions = data?.arrival_instructions ?? "";
+        const exactDetailPrefix = "Exact detail:";
+
+        if (existingArrivalInstructions.startsWith(exactDetailPrefix)) {
+          const lines = existingArrivalInstructions.split("\n");
+          const firstLine = lines[0] ?? "";
+          setBuildingDetail(firstLine.replace(exactDetailPrefix, "").trim());
+          setArrivalInstructions(lines.slice(1).join("\n").trim());
+        } else {
+          setBuildingDetail("");
+          setArrivalInstructions(existingArrivalInstructions);
+        }
 
         if (data?.rough_location) {
           setSelectedAddress(data.rough_location);
@@ -280,8 +311,8 @@ export default function CreateSessionScreen({
 
         setStripeReady(
           !!res?.data?.stripe_enabled &&
-          !!res?.data?.charges_enabled &&
-          !!res?.data?.payouts_enabled,
+            !!res?.data?.charges_enabled &&
+            !!res?.data?.payouts_enabled,
         );
       } catch (e) {
         console.error("stripe status load failed", e);
@@ -303,7 +334,7 @@ export default function CreateSessionScreen({
       const seen = await hasSeenExplainCard("create-session-intro");
       setShowSessionExplainCard(mode === "create" && !seen);
     })();
-  }, []);
+  }, [mode]);
 
   const formattedDate = useMemo(
     () =>
@@ -336,6 +367,14 @@ export default function CreateSessionScreen({
     [imageUrl1, imageUrl2, imageUrl3],
   );
 
+  const previewImages = useMemo<(string | null)[]>(() => {
+    return [
+      selectedImages[0] ?? null,
+      selectedImages[1] ?? null,
+      selectedImages[2] ?? null,
+    ];
+  }, [selectedImages]);
+
   const previewCoordinate = useMemo(() => {
     const parsedLat = Number(lat);
     const parsedLng = Number(lng);
@@ -355,22 +394,43 @@ export default function CreateSessionScreen({
   async function searchAddress(query: string) {
     setAddressQuery(query);
 
-    if (query.trim().length < 3) {
+    const cleanedQuery = query
+      .trim()
+      .replace(/\s+/g, " ")
+      .replace(/,+/g, ",");
+
+    if (cleanedQuery.length < 3) {
       setAddressResults([]);
       return;
     }
 
-    try {
+    const fallbackQuery = cleanedQuery
+      .replace(/^\d+\s*,?\s*/, "")
+      .replace(/\bgalway docks\b/gi, "Galway")
+      .trim();
+
+    async function fetchMapboxAddress(searchText: string) {
       const res = await fetch(
         `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
-          query,
-        )}.json?autocomplete=true&limit=5&access_token=${MAPBOX_TOKEN}`,
+          searchText,
+        )}.json?autocomplete=true&limit=5&country=ie&types=address,poi,place,locality,neighborhood&language=en&access_token=${MAPBOX_TOKEN}`,
       );
 
       const data = await res.json();
-      setAddressResults((data.features ?? []) as MapboxFeature[]);
+      return (data.features ?? []) as MapboxFeature[];
+    }
+
+    try {
+      let results = await fetchMapboxAddress(cleanedQuery);
+
+      if (results.length === 0 && fallbackQuery.length >= 3) {
+        results = await fetchMapboxAddress(fallbackQuery);
+      }
+
+      setAddressResults(results);
     } catch (e) {
       console.error("Address search failed", e);
+      setAddressResults([]);
     }
   }
 
@@ -426,8 +486,27 @@ export default function CreateSessionScreen({
       return false;
     }
 
+    if (!selectedAddress) {
+      Alert.alert(
+        "Missing exact address",
+        "Please search for and select the nearest exact address from the list.",
+      );
+      return false;
+    }
+
     if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLng)) {
-      Alert.alert("Invalid location", "Please choose a valid exact address.");
+      Alert.alert(
+        "Invalid location",
+        "Please choose a valid exact address from the search results.",
+      );
+      return false;
+    }
+
+    if (!buildingDetail.trim()) {
+      Alert.alert(
+        "Missing building details",
+        "Please enter the house number, building name, apartment number, studio, or exact meeting point.",
+      );
       return false;
     }
 
@@ -475,93 +554,121 @@ export default function CreateSessionScreen({
     setShowReviewModal(true);
   }
 
-  async function handlePublish() {
-    const parsedPrice = Number(price);
-    const parsedDuration = Number(duration);
-    const parsedMaxParticipants = Number(maxParticipants);
-    const parsedLat = Number(lat);
-    const parsedLng = Number(lng);
+async function handlePublish() {
+  const parsedPrice = Number(price);
+  const parsedDuration = Number(duration);
+  const parsedMaxParticipants = Number(maxParticipants);
+  const parsedLat = Number(lat);
+  const parsedLng = Number(lng);
 
-    try {
-      setSaving(true);
+  try {
+    setSaving(true);
 
-      const uploadedImages: string[] = [];
+    const uploadedImages: string[] = [];
 
-      for (const image of selectedImages) {
-        const trimmed = image.trim();
+    for (const image of selectedImages) {
+      const trimmed = image.trim();
 
-        if (!trimmed) continue;
+      if (!trimmed) continue;
 
-        if (trimmed.startsWith("file://")) {
-          console.log("UPLOADING LOCAL IMAGE URI:", trimmed);
-          const uploadedUrl = await uploadImage(trimmed);
-          uploadedImages.push(uploadedUrl);
-        } else {
-          console.log("KEEPING EXISTING IMAGE URL:", trimmed);
-          uploadedImages.push(trimmed);
-        }
-      }
-
-      const payload = {
-        title: title.trim(),
-        category,
-        description: description.trim() || undefined,
-        price: parsedPrice,
-        image_url_1: uploadedImages[0],
-        image_url_2: uploadedImages[1],
-        image_url_3: uploadedImages[2],
-        start_time: startDate.toISOString(),
-        duration: parsedDuration,
-        max_participants: parsedMaxParticipants,
-        lat: parsedLat,
-        lng: parsedLng,
-        rough_location: roughLocation.trim(),
-        arrival_instructions: arrivalInstructions.trim() || undefined,
-      };
-
-      if (mode === "edit" && sessionId) {
-        await updateSession(sessionId, payload);
-        uiToastStore.getState().showToast("Session updated");
+      if (trimmed.startsWith("file://")) {
+        console.log("UPLOADING LOCAL IMAGE URI:", trimmed);
+        const uploadedUrl = await uploadImage(trimmed);
+        uploadedImages.push(uploadedUrl);
       } else {
-        await createSession(payload);
-        uiToastStore.getState().showToast("Session created");
+        console.log("KEEPING EXISTING IMAGE URL:", trimmed);
+        uploadedImages.push(trimmed);
       }
-
-      setShowReviewModal(false);
-      safeReplace("/(teacher)/sessions");
-    } catch (e: any) {
-      console.error(e);
-
-      const status = e?.response?.status;
-      const message =
-        e?.response?.data?.message ??
-        e?.message ??
-        (mode === "edit" ? "Could not update session." : "Could not create session.");
-
-      const normalizedMessage = Array.isArray(message)
-        ? message.join("\n")
-        : String(message);
-
-      if (status === 403 && normalizedMessage.toLowerCase().includes("stripe")) {
-        Alert.alert(
-          "Complete payouts setup first",
-          "Before you can publish a session, you need to finish Stripe onboarding so we can send your payouts.",
-          [
-            { text: "Not now", style: "cancel" },
-            {
-              text: "Continue onboarding",
-              onPress: handleContinueStripeOnboarding,
-            },
-          ],
-        );
-        return;
-      }
-
-      Alert.alert("Session error", normalizedMessage);
-    } finally {
-      setSaving(false);
     }
+
+    const finalArrivalInstructions = [
+      `Exact detail: ${buildingDetail.trim()}`,
+      arrivalInstructions.trim(),
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const payload = {
+      title: title.trim(),
+      category,
+      description: description.trim() || undefined,
+      price: parsedPrice,
+      image_url_1: uploadedImages[0],
+      image_url_2: uploadedImages[1],
+      image_url_3: uploadedImages[2],
+      start_time: startDate.toISOString(),
+      duration: parsedDuration,
+      max_participants: parsedMaxParticipants,
+      lat: parsedLat,
+      lng: parsedLng,
+      rough_location: roughLocation.trim(),
+      arrival_instructions: finalArrivalInstructions,
+    };
+
+    if (mode === "edit" && sessionId) {
+      await updateSession(sessionId, payload);
+      setShowReviewModal(false);
+
+      Alert.alert(
+        "Session updated",
+        "Your changes have been submitted and the session is pending review again.",
+        [
+          {
+            text: "OK",
+            onPress: () => safeReplace("/(teacher)/sessions"),
+          },
+        ],
+      );
+
+      return;
+    }
+
+    await createSession(payload);
+    setShowReviewModal(false);
+
+    Alert.alert(
+      "Session submitted",
+      "Your session is now pending confirmation. It should be live soon once approved.",
+      [
+        {
+          text: "OK",
+          onPress: () => safeReplace("/(teacher)/sessions"),
+        },
+      ],
+    );
+  } catch (e: any) {
+    console.error(e);
+
+    const status = e?.response?.status;
+    const message =
+      e?.response?.data?.message ??
+      e?.message ??
+      (mode === "edit" ? "Could not update session." : "Could not create session.");
+
+    const normalizedMessage = Array.isArray(message)
+      ? message.join("\n")
+      : String(message);
+
+    if (status === 403 && normalizedMessage.toLowerCase().includes("stripe")) {
+      Alert.alert(
+        "Complete payouts setup first",
+        "Before you can publish a session, you need to finish Stripe onboarding so we can send your payouts.",
+        [
+          { text: "Not now", style: "cancel" },
+          {
+            text: "Continue onboarding",
+            onPress: handleContinueStripeOnboarding,
+          },
+        ],
+      );
+      return;
+    }
+
+    Alert.alert("Session error", normalizedMessage);
+  } finally {
+    setSaving(false);
   }
+}
 
   if (mode === "edit" && loadingSession) {
     return (
@@ -586,14 +693,13 @@ export default function CreateSessionScreen({
         >
           <View style={styles.hero}>
             <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>
-                {mode === "edit" ? "Edit session" : "Create session"}
-              </Text>
+              <Text style={styles.heroBadgeText}>Teacher mode</Text>
             </View>
 
             <Text style={styles.heroTitle}>
-              {mode === "edit" ? "Edit your session" : "Create a bookable session"}
+              {mode === "edit" ? "Edit session" : "Create session"}
             </Text>
+
             <Text style={styles.heroSubtitle}>
               Add the title, price, time, photos, and location learners will see.
             </Text>
@@ -639,7 +745,8 @@ export default function CreateSessionScreen({
           <FieldCard title="Title">
             <TextInput
               value={title}
-              onChangeText={setTitle}
+                         onChangeText={setTitle}
+                         autoCapitalize="words"  
               placeholder="Watercolour Basics"
               placeholderTextColor={COLORS.textMuted}
               style={styles.input}
@@ -700,13 +807,14 @@ export default function CreateSessionScreen({
           <FieldCard title="Description">
             <TextInput
               value={description}
-              onChangeText={setDescription}
-              placeholder="Tell learners what they’ll do and who it’s for."
-              placeholderTextColor={COLORS.textMuted}
-              multiline
-              style={styles.textAreaLarge}
-            />
-          </FieldCard>
+                          onChangeText={setDescription}
+                          autoCapitalize="sentences"
+                          placeholder="Tell learners what they’ll do and who it’s for."
+                          placeholderTextColor={COLORS.textMuted}
+                          multiline
+                          style={styles.textAreaLarge}
+                        />
+                      </FieldCard>
 
           <FieldCard
             title="Photos"
@@ -730,7 +838,7 @@ export default function CreateSessionScreen({
 
                     {value.trim() ? (
                       <Image
-                        source={{ uri: value.trim() }}
+source={{ uri: previewUri(value.trim())! }}
                         style={styles.sessionImagePreview}
                         resizeMode="cover"
                       />
@@ -897,16 +1005,20 @@ export default function CreateSessionScreen({
           </FieldCard>
 
           <FieldCard
-            title="Exact address"
-            subtitle="Needed for bookings. Learners only see this after they book."
+            title="Location"
+            subtitle="Exact location is private while learners browse. Booked learners receive the exact details."
           >
             <View style={styles.noticeBox}>
               <Ionicons name="lock-closed-outline" size={16} color={COLORS.accent} />
               <Text style={styles.noticeText}>
-                This exact address is private while learners browse. It is shared
-                only with booked learners.
+                Search for the nearest recognised address first, then add the exact
+                house, building, apartment, studio, or meeting point below.
               </Text>
             </View>
+
+            <Text style={[styles.label, styles.labelTopGap]}>
+              Search address
+            </Text>
 
             <TextInput
               value={selectedAddress ?? addressQuery}
@@ -916,9 +1028,9 @@ export default function CreateSessionScreen({
                 setLng("");
                 searchAddress(text);
               }}
-              placeholder="Search full address"
+              placeholder="Example: Bothar na Long, Galway"
               placeholderTextColor={COLORS.textMuted}
-              style={[styles.input, styles.inputTopGap]}
+              style={styles.input}
             />
 
             {addressResults.length > 0 && !selectedAddress ? (
@@ -934,6 +1046,17 @@ export default function CreateSessionScreen({
                       setSelectedAddress(item.place_name);
                       setAddressQuery(item.place_name);
                       setAddressResults([]);
+
+                      if (!roughLocation.trim()) {
+                        const rough =
+                          item.place_name
+                            .split(",")
+                            .slice(0, 2)
+                            .join(",")
+                            .trim() || item.place_name;
+
+                        setRoughLocation(rough);
+                      }
                     }}
                     style={[
                       styles.resultRow,
@@ -980,37 +1103,50 @@ export default function CreateSessionScreen({
                 </Mapbox.MapView>
               </View>
             ) : null}
-          </FieldCard>
 
-          <FieldCard
-            title="Public location"
-            subtitle="This is the rough area learners see while browsing."
-          >
-            <View style={styles.noticeBox}>
-              <Ionicons name="eye-outline" size={16} color={COLORS.accent} />
-              <Text style={styles.noticeText}>
-                Use a safe, helpful area label. For example: “Galway Docks”,
-                “Ranelagh, Dublin 6”, or “Beside Jervis Centre”.
-              </Text>
-            </View>
+            <Text style={[styles.label, styles.labelTopGap]}>
+              Building / unit details
+            </Text>
+
+            <TextInput
+              value={buildingDetail}
+              onChangeText={setBuildingDetail}
+              autoCapitalize="sentences"
+              placeholder="Example:Dun Na Coiribe, Apt 4, blue door"
+              placeholderTextColor={COLORS.textMuted}
+              style={styles.input}
+            />
+
+            <Text style={styles.helperInline}>
+              Add the detail Mapbox could not find. This is shown only to booked learners.
+            </Text>
+
+            <Text style={[styles.label, styles.labelTopGap]}>
+              Public location
+            </Text>
 
             <TextInput
               value={roughLocation}
-              onChangeText={setRoughLocation}
-              placeholder="Example: Galway Docks"
+          onChangeText={setRoughLocation}
+          autoCapitalize="sentences"  
+                                  placeholder="Example: Galway Docks"
               placeholderTextColor={COLORS.textMuted}
-              style={[styles.input, styles.inputTopGap]}
+              style={styles.input}
             />
-          </FieldCard>
 
-          <FieldCard
-            title="Arrival instructions"
-            subtitle="Optional. Shared with booked learners so they can find you easily."
-          >
+            <Text style={styles.helperInline}>
+              This is the rough area learners see while browsing before booking.
+            </Text>
+
+            <Text style={[styles.label, styles.labelTopGap]}>
+              Arrival instructions
+            </Text>
+
             <TextInput
               value={arrivalInstructions}
-              onChangeText={setArrivalInstructions}
-              placeholder="Example: Blue door, ring once, shoes off inside."
+                onChangeText={setArrivalInstructions}
+                autoCapitalize="sentences"
+              placeholder="Example: Ring once, wait by reception, shoes off inside."
               placeholderTextColor={COLORS.textMuted}
               multiline
               maxLength={300}
@@ -1018,7 +1154,7 @@ export default function CreateSessionScreen({
             />
 
             <Text style={styles.helperInline}>
-              {arrivalInstructions.trim().length}/300 characters
+              Optional extra guidance. {arrivalInstructions.trim().length}/300 characters
             </Text>
           </FieldCard>
 
@@ -1027,18 +1163,24 @@ export default function CreateSessionScreen({
             subtitle="Check exactly what learners will see before this goes live."
           >
             <View style={styles.previewCard}>
-              {selectedImages[0] ? (
-                <Image
-                  source={{ uri: selectedImages[0] }}
-                  style={styles.previewImage}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={styles.previewImagePlaceholder}>
-                  <Ionicons name="image-outline" size={28} color={COLORS.textMuted} />
-                  <Text style={styles.previewImagePlaceholderText}>No photo selected</Text>
-                </View>
-              )}
+              <View style={styles.previewImageRow}>
+                {previewImages.map((uri, index) => (
+                  <View key={index} style={styles.previewImageTile}>
+                    {uri ? (
+                      <Image
+source={{ uri: previewUri(uri)! }}
+                        style={styles.previewImageTileImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.previewImageTilePlaceholder}>
+                        <Ionicons name="image-outline" size={20} color={COLORS.textMuted} />
+                        <Text style={styles.previewImageTilePlaceholderText}>Photo</Text>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </View>
 
               <View style={styles.previewBody}>
                 <Text style={styles.previewTitle}>
@@ -1067,7 +1209,7 @@ export default function CreateSessionScreen({
               styles.primaryButton,
               pressed && !saving && styles.primaryButtonPressed,
               (saving || stripeStatusLoading || loadingCategories) &&
-              styles.primaryButtonDisabled,
+                styles.primaryButtonDisabled,
             ]}
           >
             <Text style={styles.primaryButtonText}>
@@ -1098,10 +1240,10 @@ export default function CreateSessionScreen({
           <View style={styles.modalBackdrop}>
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>
-                {mode === "edit" ? "Save changes?" : "Publish this session?"}
+                {mode === "edit" ? "Save changes?" : "Submit for review?"}
               </Text>
               <Text style={styles.modalSubtitle}>
-                Confirm the details below before making it bookable.
+                Confirm the details below. Learners will only see this session after it is approved.
               </Text>
 
               <View style={styles.modalSummary}>
@@ -1116,7 +1258,7 @@ export default function CreateSessionScreen({
                   Public location: {roughLocation.trim()}
                 </Text>
                 <Text style={styles.modalSummaryMuted}>
-                  Exact address is only shared after booking.
+                  Exact address and building details are only shared after booking.
                 </Text>
               </View>
 
@@ -1132,7 +1274,7 @@ export default function CreateSessionScreen({
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <Text style={styles.primaryButtonText}>
-                    {mode === "edit" ? "Save changes" : "Publish session"}
+                    {mode === "edit" ? "Save changes" : "Submit session"}
                   </Text>
                 )}
               </Pressable>
@@ -1375,9 +1517,9 @@ const styles = StyleSheet.create({
   ctaButton: {
     minHeight: 48,
     borderRadius: 16,
-    backgroundColor: "rgba(111,146,255,0.16)",
+    backgroundColor: COLORS.accentSoft,
     borderWidth: 1,
-    borderColor: "rgba(111,146,255,0.25)",
+    borderColor: COLORS.accentBorder,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -1414,6 +1556,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "800",
     marginBottom: 4,
+  },
+
+  labelTopGap: {
+    marginTop: 16,
   },
 
   helperText: {
@@ -1465,6 +1611,41 @@ const styles = StyleSheet.create({
     borderColor: COLORS.accentBorder,
   },
 
+  previewImageRow: {
+    height: 132,
+    flexDirection: "row",
+    gap: 8,
+    padding: 8,
+  },
+
+  previewImageTile: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: COLORS.surfaceSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  previewImageTileImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  previewImageTilePlaceholder: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.surfaceSoft,
+    gap: 6,
+  },
+
+  previewImageTilePlaceholderText: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
   noticeText: {
     flex: 1,
     color: COLORS.textSoft,
@@ -1497,6 +1678,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 18,
   },
+
   loadingFullScreen: {
     flex: 1,
     alignItems: "center",
@@ -1504,6 +1686,7 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: COLORS.bg,
   },
+
   loadingText: {
     color: COLORS.textSoft,
     marginTop: 10,

@@ -1,16 +1,69 @@
+import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { api } from "../../../src/api/client";
 import { getSessionBookings } from "../../../src/api/sessions";
-import { safePush, safeReplace } from "@/src/utils/safeRouter";
+import AppLayout from "@/src/components/layout/AppLayout";
+import { AppScreen } from "@/src/components/ui/AppScreen";
+import { safePush } from "@/src/utils/safeRouter";
+
+const COLORS = {
+  bg: "#12051F",
+  surface: "#241032",
+  surfaceSoft: "#321447",
+  surfaceDeep: "#0B0314",
+
+  text: "#FDF7FF",
+  textSoft: "rgba(244,229,255,0.76)",
+  textMuted: "rgba(244,229,255,0.52)",
+
+  border: "rgba(216,180,254,0.16)",
+  borderStrong: "rgba(216,180,254,0.42)",
+
+  accent: "#C084FC",
+  accentStrong: "#A855F7",
+  accentSoft: "rgba(192,132,252,0.18)",
+  accentBorder: "rgba(216,180,254,0.38)",
+
+  button: "#9333EA",
+  buttonPressed: "#7E22CE",
+  buttonSecondary: "#321447",
+
+  teacherGlow: "rgba(168,85,247,0.22)",
+  teacherCard: "#1B0829",
+  teacherCardInner: "#100318",
+
+  successBg: "rgba(81,207,102,0.12)",
+  successBorder: "rgba(81,207,102,0.22)",
+  successText: "#8CE99A",
+
+  warningBg: "rgba(255,193,7,0.12)",
+  warningBorder: "rgba(255,193,7,0.22)",
+  warningText: "#FFD666",
+
+  dangerBg: "rgba(255,107,107,0.12)",
+  dangerBorder: "rgba(255,107,107,0.22)",
+  dangerText: "#FFA8A8",
+
+  infoBg: "rgba(192,132,252,0.14)",
+  infoBorder: "rgba(216,180,254,0.28)",
+  infoText: "#E9D5FF",
+
+  neutralBg: "rgba(255,255,255,0.05)",
+  neutralBorder: "rgba(255,255,255,0.08)",
+  neutralText: "rgba(245,248,255,0.78)",
+
+  divider: "rgba(255,255,255,0.07)",
+};
 
 type SessionBookingRow = {
   id: string;
@@ -69,46 +122,41 @@ function getStatusStyles(status?: string) {
   switch (status) {
     case "CONFIRMED":
       return {
-        backgroundColor: "#eef8f0",
-        borderColor: "#d7eadb",
-        textColor: "#1f6b37",
+        backgroundColor: COLORS.successBg,
+        borderColor: COLORS.successBorder,
+        textColor: COLORS.successText,
       };
     case "PENDING":
+    case "REFUND_PENDING":
       return {
-        backgroundColor: "#fff7e8",
-        borderColor: "#f0dfb5",
-        textColor: "#8a5a00",
+        backgroundColor: COLORS.warningBg,
+        borderColor: COLORS.warningBorder,
+        textColor: COLORS.warningText,
       };
     case "CANCELLED_BY_LEARNER":
     case "CANCELLED_BY_TEACHER":
       return {
-        backgroundColor: "#fff0f0",
-        borderColor: "#f0d4d4",
-        textColor: "#9b2c2c",
-      };
-    case "REFUND_PENDING":
-      return {
-        backgroundColor: "#fff8e6",
-        borderColor: "#f0e0aa",
-        textColor: "#8a6a00",
+        backgroundColor: COLORS.dangerBg,
+        borderColor: COLORS.dangerBorder,
+        textColor: COLORS.dangerText,
       };
     case "REFUNDED":
       return {
-        backgroundColor: "#eef5ff",
-        borderColor: "#d9e5ff",
-        textColor: "#2457a6",
+        backgroundColor: COLORS.infoBg,
+        borderColor: COLORS.infoBorder,
+        textColor: COLORS.infoText,
       };
     case "EXPIRED":
       return {
-        backgroundColor: "#f5f5f5",
-        borderColor: "#e5e5e5",
-        textColor: "#777",
+        backgroundColor: COLORS.neutralBg,
+        borderColor: COLORS.neutralBorder,
+        textColor: COLORS.neutralText,
       };
     default:
       return {
-        backgroundColor: "#f5f5f5",
-        borderColor: "#e5e5e5",
-        textColor: "#333",
+        backgroundColor: COLORS.neutralBg,
+        borderColor: COLORS.neutralBorder,
+        textColor: COLORS.neutralText,
       };
   }
 }
@@ -187,7 +235,9 @@ export default function TeacherSessionDetailScreen() {
     (bookingId: string, learnerName?: string | null) => {
       Alert.alert(
         "Cancel learner booking",
-        `Are you sure you want to cancel this booking${learnerName ? ` for ${learnerName}` : ""}?\n\nIf you cancel, the learner will lose their place and any eligible refund will be processed automatically.`,
+        `Are you sure you want to cancel this booking${
+          learnerName ? ` for ${learnerName}` : ""
+        }?\n\nIf you cancel, the learner will lose their place and any eligible refund will be processed automatically.`,
         [
           { text: "Keep booking", style: "cancel" },
           {
@@ -227,311 +277,590 @@ export default function TeacherSessionDetailScreen() {
   );
 
   return (
-    <ScrollView
-      contentContainerStyle={{
-        padding: 20,
-        paddingTop: 70,
-        paddingBottom: 40,
-        backgroundColor: "white",
-        flexGrow: 1,
-      }}
-    >
-      <View
-        style={{
-          marginBottom: 24,
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          gap: 12,
-        }}
-      >
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 28, fontWeight: "900" }}>
-            Session Bookings
-          </Text>
-          <Text style={{ marginTop: 6, opacity: 0.7 }}>
-            View learners booked into this session.
-          </Text>
-        </View>
-
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          <Pressable
-            onPress={() => safePush(`/(teacher)/sessions/${id}/edit`)}
-            style={{
-              borderWidth: 1,
-              borderColor: "rgba(0,0,0,0.12)",
-              paddingVertical: 10,
-              paddingHorizontal: 14,
-              borderRadius: 12,
-              backgroundColor: "white",
-            }}
-          >
-            <Text style={{ fontWeight: "800" }}>Edit</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => router.back()}
-            style={{
-              borderWidth: 1,
-              borderColor: "rgba(0,0,0,0.12)",
-              paddingVertical: 10,
-              paddingHorizontal: 14,
-              borderRadius: 12,
-            }}
-          >
-            <Text style={{ fontWeight: "800" }}>Back</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      {loading ? (
-        <View style={{ paddingTop: 40, alignItems: "center" }}>
-          <ActivityIndicator />
-          <Text style={{ marginTop: 10 }}>Loading bookings…</Text>
-        </View>
-      ) : !session ? (
-        <View
-          style={{
-            borderWidth: 1,
-            borderColor: "rgba(0,0,0,0.08)",
-            borderRadius: 18,
-            padding: 18,
-            backgroundColor: "white",
-          }}
+    <AppLayout>
+      <AppScreen>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={{ fontSize: 18, fontWeight: "800", marginBottom: 8 }}>
-            Session not found
-          </Text>
-          <Text style={{ opacity: 0.75 }}>
-            This session could not be loaded.
-          </Text>
-        </View>
-      ) : (
-        <>
-          <View
-            style={{
-              borderWidth: 1,
-              borderColor: "rgba(0,0,0,0.08)",
-              borderRadius: 18,
-              padding: 16,
-              backgroundColor: "white",
-              marginBottom: 16,
-            }}
-          >
-            <Text style={{ fontSize: 20, fontWeight: "800" }}>
-              {session.title}
-            </Text>
+          <View style={styles.hero}>
+            <View style={styles.heroBadge}>
+              <Text style={styles.heroBadgeText}>Teacher mode</Text>
+            </View>
 
-            <Text style={{ marginTop: 6 }}>
-              {new Date(session.start_time).toLocaleDateString()} ·{" "}
-              {new Date(session.start_time).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </Text>
+            <View style={styles.heroHeaderRow}>
+              <View style={styles.heroTextWrap}>
+                <Text style={styles.heroTitle}>Session Bookings</Text>
+                <Text style={styles.heroSubtitle}>
+                  View learners booked into this session.
+                </Text>
+              </View>
 
-            <Text style={{ marginTop: 6, opacity: 0.75 }}>
-              {session.duration} min · €{session.price} · Max {session.max_participants}
-            </Text>
+              <View style={styles.heroActions}>
+                <Pressable
+                  onPress={() => safePush(`/(teacher)/sessions/${id}/edit`)}
+                  style={({ pressed }) => [
+                    styles.topButton,
+                    pressed && styles.topButtonPressed,
+                  ]}
+                >
+                  <Text style={styles.topButtonText}>Edit</Text>
+                </Pressable>
 
-            <Text style={{ marginTop: 10, fontWeight: "700" }}>
-              {bookings.length} booking{bookings.length === 1 ? "" : "s"}
-            </Text>
-
-            <Pressable
-              onPress={() => safePush(`/(teacher)/sessions/${id}/edit`)}
-              style={{
-                marginTop: 14,
-                alignSelf: "flex-start",
-                backgroundColor: "#111",
-                paddingVertical: 10,
-                paddingHorizontal: 14,
-                borderRadius: 12,
-              }}
-            >
-              <Text style={{ color: "white", fontWeight: "800" }}>
-                Edit this session
-              </Text>
-            </Pressable>
+                <Pressable
+                  onPress={() => router.back()}
+                  style={({ pressed }) => [
+                    styles.topButton,
+                    pressed && styles.topButtonPressed,
+                  ]}
+                >
+                  <Text style={styles.topButtonText}>Back</Text>
+                </Pressable>
+              </View>
+            </View>
           </View>
 
-          <View
-            style={{
-              borderWidth: 1,
-              borderColor: "#e8e1c2",
-              borderRadius: 18,
-              padding: 16,
-              backgroundColor: "#fffaf0",
-              marginBottom: 16,
-            }}
-          >
-            <Text style={{ fontWeight: "800", marginBottom: 8 }}>
-              Cancellation policy
-            </Text>
-
-            <Text style={{ lineHeight: 20, opacity: 0.8 }}>
-              If you cancel a confirmed learner booking, the learner will lose
-              their place immediately.
-            </Text>
-
-            <Text style={{ lineHeight: 20, opacity: 0.8, marginTop: 6 }}>
-              Teacher-initiated cancellations automatically trigger any eligible
-              refund for the learner.
-            </Text>
-
-            <Text style={{ lineHeight: 20, opacity: 0.8, marginTop: 6 }}>
-              Cancel bookings carefully, especially close to session start.
-            </Text>
-          </View>
-
-          {bookings.length === 0 ? (
-            <View
-              style={{
-                borderWidth: 1,
-                borderColor: "rgba(0,0,0,0.08)",
-                borderRadius: 18,
-                padding: 18,
-                backgroundColor: "white",
-              }}
-            >
-              <Text style={{ fontSize: 18, fontWeight: "800", marginBottom: 8 }}>
-                No bookings yet
-              </Text>
-              <Text style={{ opacity: 0.75 }}>
-                Learners who book this session will appear here.
-              </Text>
+          {loading ? (
+            <View style={styles.cardOuter}>
+              <View style={styles.cardInner}>
+                <View style={styles.loadingWrap}>
+                  <ActivityIndicator color={COLORS.accent} />
+                  <Text style={styles.loadingText}>Loading bookings…</Text>
+                </View>
+              </View>
+            </View>
+          ) : !session ? (
+            <View style={styles.cardOuter}>
+              <View style={styles.cardInner}>
+                <Text style={styles.cardTitle}>Session not found</Text>
+                <Text style={styles.bodyText}>
+                  This session could not be loaded.
+                </Text>
+              </View>
             </View>
           ) : (
-            <View style={{ gap: 12 }}>
-              {bookings.map((booking: SessionBookingRow) => {
-                const statusStyles = getStatusStyles(booking.status);
-                const showCancelButton = canTeacherCancelBooking(booking.status);
-                const isBusy = busyBookingId === booking.id;
-                const statusDescription = getTeacherBookingStatusDescription(
-                  booking.status,
-                );
-
-                return (
-                  <View
-                    key={booking.id}
-                    style={{
-                      borderWidth: 1,
-                      borderColor: "rgba(0,0,0,0.08)",
-                      borderRadius: 18,
-                      padding: 16,
-                      backgroundColor: "white",
-                    }}
-                  >
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        gap: 12,
-                      }}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 17, fontWeight: "800" }}>
-                          {booking.learner_first_name || "Learner"}
-                        </Text>
-
-                        <Text style={{ marginTop: 6, opacity: 0.75 }}>
-                          Booked {new Date(booking.created_at).toLocaleString()}
-                        </Text>
-                      </View>
-
-                      <View
-                        style={{
-                          backgroundColor: statusStyles.backgroundColor,
-                          borderColor: statusStyles.borderColor,
-                          borderWidth: 1,
-                          paddingHorizontal: 10,
-                          paddingVertical: 6,
-                          borderRadius: 999,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            fontWeight: "800",
-                            color: statusStyles.textColor,
-                          }}
-                        >
-                          {statusLabel(booking.status)}
-                        </Text>
-                      </View>
+            <>
+              <View style={styles.cardOuter}>
+                <View style={styles.cardInner}>
+                  <View style={styles.sessionHeaderRow}>
+                    <View style={styles.sessionTitleWrap}>
+                      <Text style={styles.cardTitle}>{session.title}</Text>
+                      <Text style={styles.metaText}>
+                        {new Date(session.start_time).toLocaleDateString()} ·{" "}
+                        {new Date(session.start_time).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </Text>
                     </View>
 
-                    <Text style={{ marginTop: 10, lineHeight: 20 }}>
-                      {booking.intro_message?.trim()
-                        ? booking.intro_message
-                        : "No intro message."}
-                    </Text>
-
-                    {statusDescription ? (
-                      <View
-                        style={{
-                          marginTop: 12,
-                          borderRadius: 12,
-                          paddingHorizontal: 12,
-                          paddingVertical: 10,
-                          backgroundColor: "#fafafa",
-                          borderWidth: 1,
-                          borderColor: "rgba(0,0,0,0.06)",
-                        }}
-                      >
-                        <Text style={{ lineHeight: 20, opacity: 0.8 }}>
-                          {statusDescription}
-                        </Text>
-                      </View>
-                    ) : null}
-
-                    {showCancelButton ? (
-                      <View
-                        style={{
-                          marginTop: 14,
-                          paddingTop: 12,
-                          borderTopWidth: 1,
-                          borderColor: "rgba(0,0,0,0.06)",
-                          flexDirection: "row",
-                          justifyContent: "flex-end",
-                        }}
-                      >
-                        <Pressable
-                          onPress={() =>
-                            handleCancelBooking(
-                              booking.id,
-                              booking.learner_first_name || null,
-                            )
-                          }
-                          disabled={isBusy}
-                          style={{
-                            paddingVertical: 10,
-                            paddingHorizontal: 14,
-                            borderRadius: 12,
-                            borderWidth: 1,
-                            borderColor: "#e7bcbc",
-                            backgroundColor: isBusy ? "#f3f3f3" : "#fff5f5",
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontWeight: "800",
-                              color: isBusy ? "#777" : "#9b2c2c",
-                            }}
-                          >
-                            {isBusy ? "Cancelling..." : "Cancel booking"}
-                          </Text>
-                        </Pressable>
-                      </View>
-                    ) : null}
+                    <View style={styles.pricePill}>
+                      <Text style={styles.pricePillText}>€{session.price}</Text>
+                    </View>
                   </View>
-                );
-              })}
-            </View>
+
+                  <View style={styles.chipsRow}>
+                    <View style={styles.chip}>
+                      <Ionicons name="time-outline" size={14} color={COLORS.text} />
+                      <Text style={styles.chipText}>{session.duration} min</Text>
+                    </View>
+
+                    <View style={styles.chip}>
+                      <Ionicons name="people-outline" size={14} color={COLORS.text} />
+                      <Text style={styles.chipText}>
+                        Max {session.max_participants}
+                      </Text>
+                    </View>
+
+                    <View style={styles.chip}>
+                      <Ionicons name="ticket-outline" size={14} color={COLORS.text} />
+                      <Text style={styles.chipText}>
+                        {bookings.length} booking{bookings.length === 1 ? "" : "s"}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Pressable
+                    onPress={() => safePush(`/(teacher)/sessions/${id}/edit`)}
+                    style={({ pressed }) => [
+                      styles.primaryButton,
+                      pressed && styles.primaryButtonPressed,
+                    ]}
+                  >
+                    <Text style={styles.primaryButtonText}>Edit this session</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              <View style={styles.warningCardOuter}>
+                <View style={styles.cardInner}>
+                  <View style={styles.noticeHeader}>
+                    <Ionicons
+                      name="warning-outline"
+                      size={18}
+                      color={COLORS.warningText}
+                    />
+                    <Text style={styles.warningTitle}>Cancellation policy</Text>
+                  </View>
+
+                  <Text style={styles.bodyText}>
+                    If you cancel a confirmed learner booking, the learner will
+                    lose their place immediately.
+                  </Text>
+
+                  <Text style={styles.bodyText}>
+                    Teacher-initiated cancellations automatically trigger any
+                    eligible refund for the learner.
+                  </Text>
+
+                  <Text style={styles.bodyText}>
+                    Cancel bookings carefully, especially close to session start.
+                  </Text>
+                </View>
+              </View>
+
+              {bookings.length === 0 ? (
+                <View style={styles.cardOuter}>
+                  <View style={styles.cardInner}>
+                    <Text style={styles.cardTitle}>No bookings yet</Text>
+                    <Text style={styles.bodyText}>
+                      Learners who book this session will appear here.
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.bookingStack}>
+                  {bookings.map((booking: SessionBookingRow) => {
+                    const statusStyles = getStatusStyles(booking.status);
+                    const showCancelButton = canTeacherCancelBooking(booking.status);
+                    const isBusy = busyBookingId === booking.id;
+                    const statusDescription = getTeacherBookingStatusDescription(
+                      booking.status,
+                    );
+
+                    return (
+                      <View key={booking.id} style={styles.cardOuter}>
+                        <View style={styles.cardInner}>
+                          <View style={styles.bookingHeaderRow}>
+                            <View style={styles.learnerAvatar}>
+                              <Text style={styles.learnerAvatarText}>
+                                {(booking.learner_first_name || "L")
+                                  .slice(0, 1)
+                                  .toUpperCase()}
+                              </Text>
+                            </View>
+
+                            <View style={styles.bookingTextWrap}>
+                              <Text style={styles.bookingName}>
+                                {booking.learner_first_name || "Learner"}
+                              </Text>
+
+                              <Text style={styles.metaText}>
+                                Booked{" "}
+                                {new Date(booking.created_at).toLocaleString()}
+                              </Text>
+                            </View>
+
+                            <View
+                              style={[
+                                styles.statusPill,
+                                {
+                                  backgroundColor: statusStyles.backgroundColor,
+                                  borderColor: statusStyles.borderColor,
+                                },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.statusPillText,
+                                  { color: statusStyles.textColor },
+                                ]}
+                              >
+                                {statusLabel(booking.status)}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <View style={styles.messageBox}>
+                            <Text style={styles.messageText}>
+                              {booking.intro_message?.trim()
+                                ? booking.intro_message
+                                : "No intro message."}
+                            </Text>
+                          </View>
+
+                          {statusDescription ? (
+                            <View style={styles.statusDescriptionBox}>
+                              <Text style={styles.bodyText}>{statusDescription}</Text>
+                            </View>
+                          ) : null}
+
+                          {showCancelButton ? (
+                            <View style={styles.bookingFooter}>
+                              <Pressable
+                                onPress={() =>
+                                  handleCancelBooking(
+                                    booking.id,
+                                    booking.learner_first_name || null,
+                                  )
+                                }
+                                disabled={isBusy}
+                                style={({ pressed }) => [
+                                  styles.cancelButton,
+                                  isBusy && styles.cancelButtonDisabled,
+                                  pressed && !isBusy && styles.cancelButtonPressed,
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.cancelButtonText,
+                                    isBusy && styles.cancelButtonTextDisabled,
+                                  ]}
+                                >
+                                  {isBusy ? "Cancelling..." : "Cancel booking"}
+                                </Text>
+                              </Pressable>
+                            </View>
+                          ) : null}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </>
           )}
-        </>
-      )}
-    </ScrollView>
+        </ScrollView>
+      </AppScreen>
+    </AppLayout>
   );
 }
+
+const styles = StyleSheet.create({
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
+    flexGrow: 1,
+  },
+
+  hero: {
+    marginBottom: 22,
+  },
+heroBadge: {
+  alignSelf: "flex-start",
+  paddingHorizontal: 12,
+  paddingVertical: 7,
+  borderRadius: 999,
+  backgroundColor: COLORS.accentStrong,
+  borderWidth: 1,
+  borderColor: COLORS.accentBorder,
+  marginBottom: 12,
+},
+
+cardOuter: {
+  borderRadius: 26,
+  borderWidth: 1.4,
+  borderColor: COLORS.borderStrong,
+  backgroundColor: COLORS.teacherCard,
+  marginBottom: 14,
+  overflow: "hidden",
+},
+
+warningCardOuter: {
+  borderRadius: 26,
+  borderWidth: 1.4,
+  borderColor: COLORS.warningBorder,
+  backgroundColor: COLORS.teacherCard,
+  marginBottom: 14,
+  overflow: "hidden",
+},
+
+cardInner: {
+  margin: 8,
+  borderRadius: 18,
+  backgroundColor: COLORS.teacherCardInner,
+  padding: 16,
+},
+
+topButton: {
+  minHeight: 42,
+  paddingHorizontal: 14,
+  borderRadius: 14,
+  borderWidth: 1,
+  borderColor: COLORS.accentBorder,
+  backgroundColor: COLORS.surfaceSoft,
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+chip: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 6,
+  backgroundColor: COLORS.surfaceSoft,
+  borderWidth: 1,
+  borderColor: COLORS.accentBorder,
+  paddingHorizontal: 10,
+  paddingVertical: 8,
+  borderRadius: 999,
+},
+
+messageBox: {
+  marginTop: 14,
+  borderRadius: 14,
+  backgroundColor: COLORS.surfaceSoft,
+  borderWidth: 1,
+  borderColor: COLORS.accentBorder,
+  padding: 12,
+},
+
+  heroBadgeText: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  heroHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
+  heroTextWrap: {
+    flex: 1,
+  },
+
+  heroTitle: {
+    color: COLORS.text,
+    fontSize: 30,
+    fontWeight: "800",
+    lineHeight: 34,
+    marginBottom: 8,
+  },
+
+  heroSubtitle: {
+    color: COLORS.textSoft,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+
+  heroActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+
+
+
+  topButtonPressed: {
+    opacity: 0.86,
+  },
+
+  topButtonText: {
+    color: COLORS.text,
+    fontWeight: "800",
+  },
+
+  cardTitle: {
+    color: COLORS.text,
+    fontSize: 20,
+    fontWeight: "900",
+    marginBottom: 6,
+  },
+
+  bodyText: {
+    color: COLORS.textSoft,
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 8,
+  },
+
+  metaText: {
+    color: COLORS.textSoft,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
+  loadingWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 24,
+  },
+
+  loadingText: {
+    color: COLORS.textSoft,
+    marginTop: 10,
+  },
+
+  sessionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
+  sessionTitleWrap: {
+    flex: 1,
+  },
+
+  pricePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: COLORS.accentSoft,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+  },
+
+  pricePillText: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  chipsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 14,
+  },
+
+  chipText: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  primaryButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: COLORS.button,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 16,
+  },
+
+  primaryButtonPressed: {
+    backgroundColor: COLORS.buttonPressed,
+  },
+
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+
+  noticeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+
+  warningTitle: {
+    color: COLORS.warningText,
+    fontSize: 17,
+    fontWeight: "900",
+  },
+
+  bookingStack: {
+    gap: 0,
+  },
+
+  bookingHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
+  learnerAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: COLORS.accentSoft,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  learnerAvatarText: {
+    color: COLORS.text,
+    fontSize: 17,
+    fontWeight: "900",
+  },
+
+  bookingTextWrap: {
+    flex: 1,
+  },
+
+  bookingName: {
+    color: COLORS.text,
+    fontSize: 17,
+    fontWeight: "900",
+    marginBottom: 3,
+  },
+
+  statusPill: {
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+
+  statusPillText: {
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  messageText: {
+    color: COLORS.textSoft,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+
+  statusDescriptionBox: {
+    marginTop: 12,
+    borderRadius: 14,
+    backgroundColor: COLORS.neutralBg,
+    borderWidth: 1,
+    borderColor: COLORS.neutralBorder,
+    padding: 12,
+  },
+
+  bookingFooter: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.divider,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+
+  cancelButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.dangerBorder,
+    backgroundColor: COLORS.dangerBg,
+  },
+
+  cancelButtonPressed: {
+    opacity: 0.86,
+  },
+
+  cancelButtonDisabled: {
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceSoft,
+  },
+
+  cancelButtonText: {
+    fontWeight: "900",
+    color: COLORS.dangerText,
+  },
+
+  cancelButtonTextDisabled: {
+    color: COLORS.textMuted,
+  },
+});
