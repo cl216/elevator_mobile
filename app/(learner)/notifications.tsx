@@ -182,23 +182,23 @@ export default function NotificationsScreen() {
     const privateSessionRequestId = item.payload?.private_session_request_id;
     const type = item.type;
 
-if (type === "private_session_request_created") {
-  if (privateSessionRequestId) {
-    safePush({
-      pathname: "/(teacher)/private-session-requests/[id]",
-      params: {
-        id: String(privateSessionRequestId),
-      },
-    });
-    return;
-  }
+    if (type === "private_session_request_created") {
+      if (privateSessionRequestId) {
+        safePush({
+          pathname: "/(teacher)/private-session-requests/[id]",
+          params: {
+            id: String(privateSessionRequestId),
+          },
+        });
+        return;
+      }
 
-  Alert.alert(
-    "Could not open request",
-    "This notification is missing the private request ID.",
-  );
-  return;
-}
+      Alert.alert(
+        "Could not open request",
+        "This notification is missing the private request ID.",
+      );
+      return;
+    }
 
     if (type === "review_reminder") {
       if (bookingId) {
@@ -215,13 +215,9 @@ if (type === "private_session_request_created") {
       type === "booking_cancelled_by_teacher" ||
       type === "refund_completed" ||
       type === "session_reminder_24h" ||
-      type === "session_reminder_1h"
+      type === "session_reminder_1h" ||
+      type === "learner_no_show_recorded"
     ) {
-      if (bookingId) {
-        safePush(`/(learner)/booking/${bookingId}`);
-        return;
-      }
-
       safeReplace("/(learner)/bookings");
       return;
     }
@@ -230,18 +226,18 @@ if (type === "private_session_request_created") {
       return;
     }
 
-if (type === "private_session_request_accepted") {
-  if (sessionId) {
-    safePush(`/(modal)/booking/${sessionId}`);
-    return;
-  }
+    if (type === "private_session_request_accepted") {
+      if (sessionId) {
+        safePush(`/(modal)/booking/${sessionId}`);
+        return;
+      }
 
-  Alert.alert(
-    "Could not open session",
-    "This notification is missing the session ID.",
-  );
-  return;
-}
+      Alert.alert(
+        "Could not open session",
+        "This notification is missing the session ID.",
+      );
+      return;
+    }
 
     if (
       type === "new_booking_started" ||
@@ -259,8 +255,9 @@ if (type === "private_session_request_accepted") {
       return;
     }
 
-if (sessionId) {
-  safePush(`/(modal)/booking/${sessionId}`);}
+    if (sessionId) {
+      safePush(`/(modal)/booking/${sessionId}`);
+    }
   }
 
   async function handleOpenMap(item: AppNotification) {
@@ -299,10 +296,10 @@ if (sessionId) {
   }
 
   function renderNotificationCard(item: AppNotification) {
-const hasSession =
-  !!item.payload?.session_id &&
-  item.type !== "private_session_request_accepted";
-      const isPrivateRequestAccepted =
+    const hasSession =
+      !!item.payload?.session_id &&
+      item.type !== "private_session_request_accepted";
+    const isPrivateRequestAccepted =
       item.type === "private_session_request_accepted";
     const isPrivateRequestDeclined =
       item.type === "private_session_request_declined";
@@ -438,17 +435,17 @@ const hasSession =
                   style={({ pressed }) => [
                     styles.markAllButton,
                     (markingRead || unreadCount === 0) &&
-                      styles.markAllButtonDisabled,
+                    styles.markAllButtonDisabled,
                     pressed &&
-                      !(markingRead || unreadCount === 0) &&
-                      styles.markAllButtonPressed,
+                    !(markingRead || unreadCount === 0) &&
+                    styles.markAllButtonPressed,
                   ]}
                 >
                   <Text
                     style={[
                       styles.markAllButtonText,
                       (markingRead || unreadCount === 0) &&
-                        styles.markAllButtonTextDisabled,
+                      styles.markAllButtonTextDisabled,
                     ]}
                   >
                     {markingRead ? "Marking..." : "Mark all read"}

@@ -346,15 +346,25 @@ const params = useLocalSearchParams<{
             </View>
           </View>
 
-          {isAdmin ? (
-            <ProfileCard
-              icon="shield-checkmark-outline"
-              title="Admin review"
-              body="Approve or reject pending sessions before they appear to learners."
-              cta="Open admin review"
-              onPress={() => router.push("/(admin)/session-review")}
-            />
-          ) : null}
+{isAdmin ? (
+  <>
+    <ProfileCard
+      icon="shield-checkmark-outline"
+      title="Admin dashboard"
+      body="Manage users, pending sessions, categories, bookings, and moderation."
+      cta="Open admin dashboard"
+      onPress={() => router.push("/(admin)/dashboard")}
+    />
+
+    <ProfileCard
+      icon="checkmark-done-outline"
+      title="Session review"
+      body="Approve or reject pending sessions before they appear to learners."
+      cta="Open session review"
+      onPress={() => router.push("/(admin)/session-review")}
+    />
+  </>
+) : null}
 
           <ProfileCard
             icon={hasTeacherProfile ? "school-outline" : "add-circle-outline"}

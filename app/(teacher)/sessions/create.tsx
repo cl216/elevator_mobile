@@ -36,7 +36,7 @@ import { uiToastStore } from "../../../src/store/uiToast.store";
 import {
   hasSeenExplainCard,
   markExplainCardSeen,
-} from "../../../src/utils/explainCard";
+} from "@/src/utils/explainCard";
 
 import AppLayout from "@/src/components/layout/AppLayout";
 import { AppScreen } from "@/src/components/ui/AppScreen";
@@ -705,14 +705,27 @@ async function handlePublish() {
             </Text>
           </View>
 
-          {showSessionExplainCard ? (
-            <ExplainCard
-              title="Keep it simple"
-              body="Teachers create one session here with title, price, time, and location. Learners only ever see bookable sessions."
-              dismissText="Got it"
-              onDismiss={handleDismissSessionExplainCard}
-            />
-          ) : null}
+{showSessionExplainCard ? (
+  <Modal transparent visible animationType="fade">
+    <View style={styles.explainModalBackdrop}>
+      <View style={styles.explainModalCard}>
+        <ExplainCard
+          title="Create your teaching session"
+          iconName="sparkles-outline"
+          body="Sessions are what learners discover and book on the map.
+
+Add a clear title, photos, price, date, and teaching area.
+
+Your exact address stays private until somebody books."
+          ctaText="Start creating"
+          onPressCta={handleDismissSessionExplainCard}
+          dismissText="Got it"
+          onDismiss={handleDismissSessionExplainCard}
+        />
+      </View>
+    </View>
+  </Modal>
+) : null}
 
           {stripeStatusLoading ? (
             <View style={styles.infoOuter}>
@@ -1926,7 +1939,16 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 14,
   },
+explainModalBackdrop: {
+  flex: 1,
+  backgroundColor: "rgba(0,0,0,0.72)",
+  justifyContent: "center",
+  paddingHorizontal: 20,
+},
 
+explainModalCard: {
+  width: "100%",
+},
   modalSummaryTitle: {
     color: COLORS.text,
     fontSize: 17,

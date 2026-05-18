@@ -1,5 +1,6 @@
 import AppLayout from "@/src/components/layout/AppLayout";
 import { AppScreen } from "@/src/components/ui/AppScreen";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import { Ionicons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 import { router, useFocusEffect } from "expo-router";
@@ -10,7 +11,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import {
   ActivityIndicator,
   Alert,
@@ -24,16 +24,15 @@ import {
 } from "react-native";
 import { SessionBottomSheet } from "../../src/components/session/sessionBottomSheet";
 
+import {
+  getMyLearnerPrivateSessionRequests,
+  type PrivateSessionRequest,
+} from "@/src/api/privateSessionRequests";
 import { api } from "../../src/api/client";
 import {
   createCheckoutSession,
   syncCheckoutStatus,
 } from "../../src/api/payments";
-import {
-  getMyLearnerPrivateSessionRequests,
-  type PrivateSessionRequest,
-} from "@/src/api/privateSessionRequests";
-import { hasSeenExplainCard } from "../../src/utils/explainCard";
 
 const COLORS = {
   bg: "#05070F",
@@ -320,7 +319,6 @@ export default function LearnerBookingsScreen() {
     PrivateSessionRequest[]
   >([]);
   const [error, setError] = useState<string | null>(null);
-  const [, setShowBookingsExplainCard] = useState(true);
 
   const sessionSheetRef = useRef<any>(null);
   const [sheetSessionId, setSheetSessionId] = useState<string | null>(null);
@@ -409,13 +407,6 @@ export default function LearnerBookingsScreen() {
     return () => {
       subscription.remove();
     };
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      const seen = await hasSeenExplainCard("learner-bookings-intro");
-      setShowBookingsExplainCard(!seen);
-    })();
   }, []);
 
   const handleCompletePayment = useCallback(

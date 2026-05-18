@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 type ExplainCardProps = {
@@ -9,6 +9,21 @@ type ExplainCardProps = {
   onPressCta?: () => void;
   dismissText?: string;
   onDismiss?: () => void;
+  iconName?: keyof typeof Ionicons.glyphMap;
+};
+
+const COLORS = {
+  bg: "#05070F",
+  surface: "#0D1424",
+  surfaceSoft: "#121A2C",
+  text: "#F5F8FF",
+  textSoft: "rgba(222,230,247,0.72)",
+  textMuted: "rgba(222,230,247,0.52)",
+  borderStrong: "rgba(110,145,255,0.28)",
+  accent: "#6F92FF",
+  accentSoft: "rgba(111,146,255,0.12)",
+  accentBorder: "rgba(111,146,255,0.25)",
+  button: "#3F6AE0",
 };
 
 export function ExplainCard({
@@ -18,68 +33,54 @@ export function ExplainCard({
   onPressCta,
   dismissText = "Got it",
   onDismiss,
+  iconName = "shield-checkmark-outline",
 }: ExplainCardProps) {
   return (
-    <View
-      style={{
-        backgroundColor: "white",
-        borderRadius: 22,
-        borderWidth: 1,
-        borderColor: "rgba(0,0,0,0.08)",
-        padding: 18,
-        marginBottom: 10,
-      }}
-    >
-      <View
-        style={{
-          width: 54,
-          height: 54,
-          borderRadius: 27,
-          backgroundColor: "rgba(111,146,255,0.13)",
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: 14,
-        }}
-      >
-        <Ionicons name="map-outline" size={26} color="#3F6AE0" />
+    <View style={styles.card}>
+      <View style={styles.iconWrap}>
+        <Ionicons name={iconName} size={24} color={COLORS.accent} />
       </View>
 
-      <Text style={{ fontWeight: "900", fontSize: 22, marginBottom: 16 }}>
-        {title}
-      </Text>
+      <Text style={styles.title}>{title}</Text>
 
-      <View style={{ marginBottom: 16 }}>{body}</View>
+      <View style={styles.bodyWrap}>
+        {typeof body === "string" ? (
+          <Text style={styles.bodyText}>{body}</Text>
+        ) : (
+          body
+        )}
+      </View>
 
-      <View style={{ gap: 10 }}>
+      <View style={styles.buttonStack}>
         {ctaText && onPressCta ? (
           <Pressable
             onPress={onPressCta}
-            style={{
-              backgroundColor: "#3F6AE0",
-              paddingVertical: 14,
-              paddingHorizontal: 14,
-              borderRadius: 16,
-              alignItems: "center",
-            }}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && styles.buttonPressed,
+            ]}
           >
-            <Text style={{ color: "white", fontWeight: "900", fontSize: 15 }}>
-              {ctaText}
-            </Text>
+            <Text style={styles.primaryButtonText}>{ctaText}</Text>
           </Pressable>
         ) : null}
 
         {onDismiss ? (
           <Pressable
             onPress={onDismiss}
-            style={{
-              backgroundColor: "#3F6AE0",
-              paddingVertical: 14,
-              paddingHorizontal: 14,
-              borderRadius: 16,
-              alignItems: "center",
-            }}
+            style={({ pressed }) => [
+              ctaText && onPressCta
+                ? styles.secondaryButton
+                : styles.primaryButton,
+              pressed && styles.buttonPressed,
+            ]}
           >
-            <Text style={{ color: "white", fontWeight: "900", fontSize: 15 }}>
+            <Text
+              style={
+                ctaText && onPressCta
+                  ? styles.secondaryButtonText
+                  : styles.primaryButtonText
+              }
+            >
               {dismissText}
             </Text>
           </Pressable>
@@ -88,3 +89,79 @@ export function ExplainCard({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    width: "100%",
+    borderRadius: 26,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.borderStrong,
+    padding: 22,
+  },
+
+  iconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.accentSoft,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+    marginBottom: 16,
+  },
+
+  title: {
+    color: COLORS.text,
+    fontSize: 24,
+    fontWeight: "900",
+  },
+
+  bodyWrap: {
+    marginTop: 8,
+    marginBottom: 20,
+  },
+
+  bodyText: {
+    color: COLORS.textSoft,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+
+  buttonStack: {
+    gap: 12,
+  },
+
+  primaryButton: {
+    minHeight: 52,
+    borderRadius: 16,
+    backgroundColor: COLORS.button,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+  },
+
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+
+  secondaryButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+  },
+
+  secondaryButtonText: {
+    color: COLORS.textMuted,
+    fontWeight: "700",
+    fontSize: 13,
+  },
+
+  buttonPressed: {
+    opacity: 0.88,
+  },
+});

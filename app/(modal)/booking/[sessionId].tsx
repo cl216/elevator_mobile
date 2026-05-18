@@ -1,11 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Linking from "expo-linking";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -56,21 +59,20 @@ const COLORS = {
   divider: "rgba(255,255,255,0.06)",
 };
 
+const BOOKING_EXPLAIN_KEY = "booking-flow-explained-v1";
+
 type SessionDetail = {
   id: string;
   start_time: string;
   end_time?: string;
   duration: number;
   price: number;
-
   rough_location?: string | null;
-
   class?: {
     title?: string;
     description?: string;
     category?: string;
   };
-
   teacher?: {
     id: string;
     name?: string;
@@ -153,16 +155,17 @@ export default function BookingPanel() {
       introMessage?: string;
     }>();
 
-  const [introMessage, setIntroMessage] = useState("");
   const insets = useSafeAreaInsets();
 
   const imageUrl = authStore((s) => s.imageUrl);
   const currentUser = authStore((s: any) => s.user);
 
+  const [introMessage, setIntroMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reserveLoading, setReserveLoading] = useState(false);
+  const [showBookingExplain, setShowBookingExplain] = useState(false);
 
   const hasProfilePhoto = useMemo(() => {
     return !!(
@@ -180,7 +183,27 @@ export default function BookingPanel() {
     ) {
       setIntroMessage(savedIntroMessage);
     }
-  }, [savedIntroMessage]);
+  }, [savedIntroMessage, introMessage]);
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(BOOKING_EXPLAIN_KEY);
+
+        if (alive && !seen) {
+          setShowBookingExplain(true);
+        }
+      } catch (e) {
+        console.log("BOOKING_EXPLAIN_LOAD_ERROR", e);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -220,8 +243,13 @@ export default function BookingPanel() {
   const title = session?.class?.title?.trim() || "Session";
   const teacherName = session?.teacher?.name?.trim() || "Teacher";
   const start = formatDateTime(session?.start_time);
-  const price = session?.price ?? 0;
   const duration = session?.duration ?? 0;
+
+  const lessonPrice = Number(session?.price ?? 0);
+const platformFee = 3;
+const stripeFee =
+  ((lessonPrice + platformFee) * 0.015) + 0.25;
+  const totalPrice = lessonPrice + platformFee + stripeFee;
 
   const publicLocation =
     session?.rough_location?.trim() || "Public area shown before booking";
@@ -257,6 +285,21 @@ export default function BookingPanel() {
         },
       ],
     );
+  }
+
+  async function dismissBookingExplain() {
+    try {
+      await AsyncStorage.setItem(BOOKING_EXPLAIN_KEY, "seen");
+    } catch (e) {
+      console.log("BOOKING_EXPLAIN_SAVE_ERROR", e);
+    }
+
+    setShowBookingExplain(false);
+  }
+
+  async function continueFromBookingExplain() {
+    await dismissBookingExplain();
+    await handleReserve();
   }
 
   async function handleReserve() {
@@ -335,104 +378,11 @@ export default function BookingPanel() {
     }
   }
 
-return (
-  <View style={styles.backdrop}>
-    <View style={styles.panelOuter}>
+  return (
+    <View style={styles.backdrop}>
+      <View style={styles.panelOuter}>
         <View style={styles.panelInner}>
-          <View style={[styles.header, { paddingTop: 16 + insets.top }]}>
-            <Pressable
-              onPress={() => router.back()}
-              style={[styles.closeButton, { top: 14 + insets.top }]}
-            >
-              <Ionicons name="close" size={18} color={COLORS.text} />
-            </Pressable>
 
-            <View style={styles.heroBadge}>
-              <Ionicons name="ticket-outline" size={13} color={COLORS.text} />
-              <Text style={styles.heroBadgeText}>Learner booking</Text>
-            </View>
-
-            <Text style={styles.title}>Confirm your place</Text>
-
-            <Text style={styles.subtitle}>
-              Review the session, add an optional note, then continue to secure
-              checkout.
-            </Text>
-
-            <View style={styles.summaryCard}>
-              <View style={styles.summaryIcon}>
-                <Ionicons name="school-outline" size={20} color="#FFFFFF" />
-              </View>
-
-              <View style={styles.summaryTextWrap}>
-                <Text style={styles.sessionTitle} numberOfLines={2}>
-                  {title}
-                </Text>
-
-                <Text style={styles.metaText}>Hosted by {teacherName}</Text>
-
-                {start ? (
-                  <Text style={styles.metaText}>
-                    {start}
-                    {duration ? ` · ${duration} min` : ""}
-                  </Text>
-                ) : null}
-
-                <Text style={styles.metaText}>{publicLocation}</Text>
-              </View>
-
-              <View style={styles.pricePill}>
-                <Text style={styles.priceText}>€{price}</Text>
-              </View>
-            </View>
-
-            {!loading && !error && !hasProfilePhoto ? (
-              <Pressable
-                onPress={handleMissingProfilePhoto}
-                style={({ pressed }) => [
-                  styles.photoRequiredBox,
-                  pressed && styles.photoRequiredBoxPressed,
-                ]}
-              >
-                <Ionicons
-                  name="person-circle-outline"
-                  size={18}
-                  color={COLORS.warningText}
-                />
-
-                <View style={styles.photoRequiredTextWrap}>
-                  <Text style={styles.photoRequiredTitle}>
-                    Profile photo required
-                  </Text>
-
-                  <Text style={styles.photoRequiredText}>
-                    Add a photo now. After it uploads, you’ll be returned to this
-                    booking.
-                  </Text>
-                </View>
-
-                <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color={COLORS.warningText}
-                />
-              </Pressable>
-            ) : null}
-
-            {sessionIsPast ? (
-              <View style={styles.warningBox}>
-                <Ionicons
-                  name="alert-circle-outline"
-                  size={16}
-                  color={COLORS.dangerText}
-                />
-
-                <Text style={styles.warningText}>
-                  This session has already started or is in the past.
-                </Text>
-              </View>
-            ) : null}
-          </View>
 
           <ScrollView contentContainerStyle={styles.scrollContent}>
             {loading ? (
@@ -530,7 +480,55 @@ return (
                     </Text>
                   </View>
                 </View>
+<View style={styles.priceBreakdownCard}>
+  <Text style={styles.priceBreakdownTitle}>
+    Price breakdown
+  </Text>
 
+  <View style={styles.priceRow}>
+    <Text style={styles.priceLabel}>Lesson</Text>
+
+    <Text style={styles.priceValue}>
+      €{lessonPrice.toFixed(2)}
+    </Text>
+  </View>
+
+  <View style={styles.priceRow}>
+    <Text style={styles.priceLabel}>
+      Elevator service fee
+    </Text>
+
+    <Text style={styles.priceValue}>
+      €{platformFee.toFixed(2)}
+    </Text>
+  </View>
+
+  <View style={styles.priceRow}>
+    <Text style={styles.priceLabel}>
+      Secure payment processing
+    </Text>
+
+    <Text style={styles.priceValue}>
+      €{stripeFee.toFixed(2)}
+    </Text>
+  </View>
+
+  <View style={styles.priceDivider} />
+
+  <View style={styles.priceRow}>
+    <Text style={styles.totalLabel}>
+      Total charged today
+    </Text>
+
+    <Text style={styles.totalValue}>
+      €{totalPrice.toFixed(2)}
+    </Text>
+  </View>
+
+  <Text style={styles.priceTransparencyText}>
+    Includes payment processing and platform protection fees.
+  </Text>
+</View>
                 <View style={styles.policyCard}>
                   <View style={styles.cardTitleRow}>
                     <Ionicons
@@ -583,7 +581,7 @@ return (
                   : sessionIsPast
                     ? "Session started"
                     : hasProfilePhoto
-                      ? `Continue to pay €${price}`
+                      ? `Continue to pay €${totalPrice.toFixed(2)}`
                       : "Add profile photo to continue"}
               </Text>
             </Pressable>
@@ -595,6 +593,111 @@ return (
           </View>
         </View>
       </View>
+
+      <Modal
+        visible={showBookingExplain}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissBookingExplain}
+      >
+        <View style={styles.explainOverlay}>
+          <View style={styles.explainCard}>
+            <View style={styles.explainIconWrap}>
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={24}
+                color={COLORS.accent}
+              />
+            </View>
+
+            <Text style={styles.explainTitle}>Before you book</Text>
+
+            <Text style={styles.explainSubtitle}>
+              Here’s what happens after you continue to payment.
+            </Text>
+
+            <View style={styles.explainItem}>
+              <Ionicons
+                name="card-outline"
+                size={18}
+                color={COLORS.infoText}
+              />
+
+              <View style={styles.explainItemTextWrap}>
+                <Text style={styles.explainItemTitle}>
+                  Secure Stripe checkout
+                </Text>
+
+                <Text style={styles.explainItemText}>
+                  Payment is processed securely through Stripe.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.explainItem}>
+              <Ionicons
+                name="time-outline"
+                size={18}
+                color={COLORS.infoText}
+              />
+
+              <View style={styles.explainItemTextWrap}>
+                <Text style={styles.explainItemTitle}>
+                  Cancellation timing
+                </Text>
+
+                <Text style={styles.explainItemText}>
+                  Cancel 12+ hours before the session for a full refund.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.explainItem}>
+              <Ionicons
+                name="location-outline"
+                size={18}
+                color={COLORS.infoText}
+              />
+
+              <View style={styles.explainItemTextWrap}>
+                <Text style={styles.explainItemTitle}>
+                  Exact meetup details
+                </Text>
+
+                <Text style={styles.explainItemText}>
+                  Full arrival instructions appear after booking confirmation.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.explainItem}>
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={18}
+                color={COLORS.infoText}
+              />
+
+              <View style={styles.explainItemTextWrap}>
+                <Text style={styles.explainItemTitle}>
+                  Instant confirmation
+                </Text>
+
+                <Text style={styles.explainItemText}>
+                  Your booking becomes active immediately after successful
+                  payment.
+                </Text>
+              </View>
+            </View>
+
+            <Pressable
+              onPress={dismissBookingExplain}
+              style={styles.explainSecondaryButton}
+            >
+              <Text style={styles.explainSecondaryButtonText}>Understood!</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -607,6 +710,7 @@ const styles = StyleSheet.create({
 
   panelOuter: {
     flex: 1,
+      paddingTop: 42,
     backgroundColor: COLORS.surface,
     borderTopLeftRadius: 28,
     borderBottomLeftRadius: 28,
@@ -737,6 +841,65 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontWeight: "900",
     fontSize: 16,
+  },
+
+  priceBreakdownCard: {
+    marginTop: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.borderStrong,
+    backgroundColor: COLORS.surfaceSoft,
+    padding: 14,
+  },
+
+  priceBreakdownTitle: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "900",
+    marginBottom: 12,
+  },
+
+  priceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+
+  priceLabel: {
+    color: COLORS.textSoft,
+    fontSize: 14,
+  },
+
+  priceValue: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  priceDivider: {
+    height: 1,
+    backgroundColor: COLORS.divider,
+    marginVertical: 8,
+  },
+
+  totalLabel: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+
+  totalValue: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  priceTransparencyText: {
+    marginTop: 10,
+    color: COLORS.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
   },
 
   photoRequiredBox: {
@@ -1003,5 +1166,100 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     textAlign: "center",
+  },
+
+  explainOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+
+  explainCard: {
+    width: "100%",
+    borderRadius: 26,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.borderStrong,
+    padding: 22,
+  },
+
+  explainIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.accentSoft,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+    marginBottom: 16,
+  },
+
+  explainTitle: {
+    color: COLORS.text,
+    fontSize: 24,
+    fontWeight: "900",
+  },
+
+  explainSubtitle: {
+    marginTop: 8,
+    color: COLORS.textSoft,
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 20,
+  },
+
+  explainItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 18,
+  },
+
+  explainItemTextWrap: {
+    flex: 1,
+  },
+
+  explainItemTitle: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+
+  explainItemText: {
+    color: COLORS.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  explainPrimaryButton: {
+    marginTop: 8,
+    minHeight: 52,
+    borderRadius: 16,
+    backgroundColor: COLORS.button,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  explainPrimaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+
+  explainSecondaryButton: {
+    marginTop: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+  },
+
+  explainSecondaryButtonText: {
+    color: COLORS.textMuted,
+    fontWeight: "700",
+    fontSize: 13,
   },
 });

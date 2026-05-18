@@ -16,8 +16,6 @@ import {
   View,
 } from "react-native";
 import { deleteAccount } from "@/src/api/auth";
-import { BackHandler } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
 import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import { getNearbyTeacherDemand } from "../../src/api/classRequests";
 import { api } from "../../src/api/client";
@@ -26,7 +24,7 @@ import { authStore } from "../../src/store/auth.store";
 import {
   hasSeenExplainCard,
   markExplainCardSeen,
-} from "../../src/utils/explainCard";
+} from "@/src/utils/explainCard";
 
 import AppLayout from "@/src/components/layout/AppLayout";
 import { AppButton } from "@/src/components/ui/AppButton";
@@ -51,20 +49,14 @@ const COLORS = {
   accentBorder: "rgba(216,180,254,0.38)",
 
   button: "#9333EA",
-  buttonPressed: "#7E22CE",
-  buttonSecondary: "#35185A",
 
   successBg: "rgba(34,197,94,0.14)",
   successBorder: "rgba(34,197,94,0.28)",
-successText: "#8CE99A",
+  successText: "#8CE99A",
 
   warningBg: "rgba(251,191,36,0.14)",
   warningBorder: "rgba(251,191,36,0.28)",
   warningText: "#FDE68A",
-
-  dangerBg: "rgba(248,113,113,0.14)",
-  dangerBorder: "rgba(248,113,113,0.28)",
-  dangerText: "#FCA5A5",
 
   divider: "rgba(255,255,255,0.08)",
 };
@@ -110,6 +102,7 @@ function DashboardCard({
 
           <View style={styles.cardHeaderTextWrap}>
             <Text style={styles.sectionTitle}>{title}</Text>
+
             <Ionicons
               name="chevron-forward"
               size={18}
@@ -126,14 +119,22 @@ function DashboardCard({
 
 export default function TeacherDashboard() {
   const [loading, setLoading] = useState(true);
+
   const [attentionSummary, setAttentionSummary] =
-  useState<TeacherAttentionSummary | null>(null);
-  const [stripeStatus, setStripeStatus] = useState<StripeStatusResponse | null>(
-    null,
-  );
+    useState<TeacherAttentionSummary | null>(null);
+
+  const [stripeStatus, setStripeStatus] =
+    useState<StripeStatusResponse | null>(null);
+
   const [onboardingLoading, setOnboardingLoading] = useState(false);
+
   const [dashboardError, setDashboardError] = useState<string | null>(null);
-  const [showTeacherExplainCard, setShowTeacherExplainCard] = useState(false);
+
+const [showTeacherExplainCard, setShowTeacherExplainCard] =
+  useState(false);
+const [checkingExplainCard, setCheckingExplainCard] =
+  useState(true);
+
   const [demand, setDemand] = useState<DemandState>({
     existing_categories: [],
     custom_ideas: [],
@@ -144,16 +145,19 @@ export default function TeacherDashboard() {
       setLoading(true);
       setDashboardError(null);
 
-const [stripeRes, demandRes, attentionRes] = await Promise.all([
-  api.get("/teacher/stripe/status"),
-  getNearbyTeacherDemand(),
-  getTeacherAttentionSummary(),
-]);
+      const [stripeRes, demandRes, attentionRes] = await Promise.all([
+        api.get("/teacher/stripe/status"),
+        getNearbyTeacherDemand(),
+        getTeacherAttentionSummary(),
+      ]);
 
-setStripeStatus(stripeRes.data);
-setAttentionSummary(attentionRes);
+      setStripeStatus(stripeRes.data);
+      setAttentionSummary(attentionRes);
+
       setDemand({
-        existing_categories: Array.isArray(demandRes.existing_categories)
+        existing_categories: Array.isArray(
+          demandRes.existing_categories
+        )
           ? demandRes.existing_categories
           : [],
         custom_ideas: Array.isArray(demandRes.custom_ideas)
@@ -163,18 +167,15 @@ setAttentionSummary(attentionRes);
     } catch (e: any) {
       console.error(e);
 
-      if (e?.response?.status === 429) {
-        setDashboardError("Too many requests. Please wait a moment, then try again.");
-        return;
-      }
-
       const message =
         e?.response?.data?.message ??
         e?.message ??
         "Could not load teacher dashboard.";
 
       setDashboardError(
-        Array.isArray(message) ? message.join("\n") : String(message),
+        Array.isArray(message)
+          ? message.join("\n")
+          : String(message)
       );
     } finally {
       setLoading(false);
@@ -185,55 +186,50 @@ setAttentionSummary(attentionRes);
     loadDashboard();
   }, [loadDashboard]);
 
-  useEffect(() => {
-    (async () => {
-      const seen = await hasSeenExplainCard("teacher-dashboard-intro");
+useEffect(() => {
+  (async () => {
+    try {
+      const seen = await hasSeenExplainCard(
+        "teacher-dashboard-intro"
+      );
+
       setShowTeacherExplainCard(!seen);
-    })();
+    } finally {
+      setCheckingExplainCard(false);
+    }
+  })();
+}, []);
+
+  const handleDismissTeacherExplainCard = useCallback(async () => {
+    await markExplainCardSeen("teacher-dashboard-intro");
+    setShowTeacherExplainCard(false);
   }, []);
 
-   ////FOR TESTING EXPLAINCARD
-// useEffect(() => {
-//   setShowTeacherExplainCard(true);
-// }, []);
+  const stripeReady =
+    !!stripeStatus?.stripe_enabled &&
+    !!stripeStatus?.charges_enabled &&
+    !!stripeStatus?.payouts_enabled;
 
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      "Delete your account?",
-      "This will permanently delete:\n\n• Your profile\n• All sessions\n• All bookings\n• All messages and requests\n\nThis action cannot be undone.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Delete permanently",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteAccount();
+  const stripeStatusText = useMemo(() => {
+    if (stripeReady) return "Ready";
+    return "Action needed";
+  }, [stripeReady]);
 
-              await authStore.getState().clearAuthLocalOnly();
-              safeReplace("/(auth)/login");
-            } catch (e) {
-              Alert.alert("Error", "Could not delete account.");
-            }
-          },
-        },
-      ]
-    );
-  };
+  const topExistingCategories =
+    demand.existing_categories.slice(0, 5);
 
-  async function handleLogout() {
-    await authStore.getState().logout();
-    safeReplace("/(auth)/login");
-  }
+  const topCustomIdeas = demand.custom_ideas.slice(0, 5);
+
+  const demandEmpty =
+    demand.existing_categories.length === 0 &&
+    demand.custom_ideas.length === 0;
 
   async function handleStripeOnboarding() {
     try {
       setOnboardingLoading(true);
 
       const res = await api.post("/teacher/stripe/onboard");
+
       const onboardingUrl = res?.data?.url;
 
       if (!onboardingUrl) {
@@ -251,44 +247,52 @@ setAttentionSummary(attentionRes);
 
       Alert.alert(
         "Stripe onboarding",
-        Array.isArray(message) ? message.join("\n") : String(message),
+        Array.isArray(message)
+          ? message.join("\n")
+          : String(message)
       );
     } finally {
       setOnboardingLoading(false);
     }
   }
 
-  //   useFocusEffect(
-  //   useCallback(() => {
-  //     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-  //       safeReplace("/(learner)/map");
-  //       return true;
-  //     });
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete your account?",
+      "This action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete permanently",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteAccount();
 
-  //     return () => sub.remove();
-  //   }, []),
-  // );
+              await authStore
+                .getState()
+                .clearAuthLocalOnly();
 
-  const handleDismissTeacherExplainCard = useCallback(async () => {
-    await markExplainCardSeen("teacher-dashboard-intro");
-    setShowTeacherExplainCard(false);
-  }, []);
+              safeReplace("/(auth)/login");
+            } catch {
+              Alert.alert(
+                "Error",
+                "Could not delete account."
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
 
-  const stripeReady =
-    !!stripeStatus?.stripe_enabled &&
-    !!stripeStatus?.charges_enabled &&
-    !!stripeStatus?.payouts_enabled;
-
-  const topExistingCategories = demand.existing_categories.slice(0, 5);
-  const topCustomIdeas = demand.custom_ideas.slice(0, 5);
-
-  const demandEmpty =
-    demand.existing_categories.length === 0 && demand.custom_ideas.length === 0;
-
-  const stripeStatusText = useMemo(() => {
-    if (stripeReady) return "Ready";
-    return "Action needed";
-  }, [stripeReady]);
+  async function handleLogout() {
+    await authStore.getState().logout();
+    safeReplace("/(auth)/login");
+  }
 
   return (
     <AppLayout>
@@ -299,125 +303,159 @@ setAttentionSummary(attentionRes);
         >
           <View style={styles.hero}>
             <View style={styles.heroBadge}>
-<Text style={styles.heroBadgeText}>Teacher mode</Text>
+              <Text style={styles.heroBadgeText}>
+                Teacher mode
+              </Text>
             </View>
 
             <Text style={styles.title}>Dashboard</Text>
+
             <Text style={styles.subtitle}>
-  Your teaching workspace for sessions, payouts, profile, and local demand.            </Text>
+              Your teaching workspace for sessions,
+              payouts, learners, and local demand.
+            </Text>
           </View>
 
           {loading ? (
-            <DashboardCard icon="grid-outline" title="Dashboard">
+            <DashboardCard
+              icon="grid-outline"
+              title="Dashboard"
+            >
               <View style={styles.loadingWrap}>
                 <ActivityIndicator color={COLORS.accent} />
-                <Text style={styles.loadingText}>Loading dashboard…</Text>
+
+                <Text style={styles.loadingText}>
+                  Loading dashboard…
+                </Text>
               </View>
             </DashboardCard>
           ) : dashboardError ? (
-            <DashboardCard icon="alert-circle-outline" title="Dashboard error">
-              <Text style={styles.bodyText}>{dashboardError}</Text>
-              <AppButton title="Try again" onPress={loadDashboard} />
+            <DashboardCard
+              icon="alert-circle-outline"
+              title="Dashboard error"
+            >
+              <Text style={styles.bodyText}>
+                {dashboardError}
+              </Text>
+
+              <AppButton
+                title="Try again"
+                onPress={loadDashboard}
+              />
             </DashboardCard>
           ) : (
             <>
-{showTeacherExplainCard ? (
-  <Modal transparent visible animationType="fade">
-    <View style={styles.explainModalBackdrop}>
-      <View style={styles.teacherExplainCard}>
-        <View style={styles.teacherExplainTopIcon}>
-          <Ionicons name="map-outline" size={28} color={COLORS.accent} />
-        </View>
+{!checkingExplainCard && showTeacherExplainCard ? (
+                  <Modal transparent visible animationType="fade">
+                  <View style={styles.explainModalBackdrop}>
+                    <View style={styles.explainModalCard}>
+<ExplainCard
+  title="Welcome to teaching on Elevator"
+  iconName="school-outline"
+  body="This is your teacher workspace.
 
-        <Text style={styles.teacherExplainTitle}>Simple teaching flow</Text>
+Create sessions, manage bookings, track payouts, and grow your local teaching profile.
 
-        <View style={styles.teacherExplainBody}>
-          <View style={styles.explainRow}>
-            <View style={styles.explainIconCircle}>
-              <Ionicons name="create-outline" size={22} color={COLORS.accent} />
-            </View>
+Good photos and beginner-friendly sessions usually perform best."
+  ctaText="Continue"
+  onPressCta={() => {
+    setShowTeacherExplainCard(false);
+    handleDismissTeacherExplainCard();
+  }}
+  dismissText="Maybe later"
+  onDismiss={handleDismissTeacherExplainCard}
+/>
+                    </View>
+                  </View>
+                </Modal>
+              ) : null}
 
-            <Text style={styles.explainText}>
-              Create a session with{" "}
-              <Text style={styles.explainStrong}>title, price, time</Text>, and
-              location.
-            </Text>
-          </View>
+              <DashboardCard
+                icon="notifications-outline"
+                title="Needs attention"
+              >
+                {attentionSummary?.items?.length ? (
+                  <>
+                    <Text style={styles.bodyText}>
+                      You have{" "}
+                      {
+                        attentionSummary.total_action_items
+                      }{" "}
+                      teaching item
+                      {attentionSummary.total_action_items === 1
+                        ? ""
+                        : "s"}{" "}
+                      needing attention.
+                    </Text>
 
-          <View style={styles.explainDivider} />
+                    <View style={styles.attentionList}>
+                      {attentionSummary.items.map((item) => (
+                        <Pressable
+                          key={item.type}
+                          onPress={() =>
+                            safePush(item.route as any)
+                          }
+                          style={[
+                            styles.attentionRow,
+                            item.priority === "high"
+                              ? styles.attentionRowHigh
+                              : null,
+                          ]}
+                        >
+                          <View
+                            style={styles.attentionCountPill}
+                          >
+                            <Text
+                              style={
+                                styles.attentionCountText
+                              }
+                            >
+                              {item.count}
+                            </Text>
+                          </View>
 
-          <View style={styles.explainRow}>
-            <View style={styles.explainIconCircle}>
-              <Ionicons name="calendar-outline" size={22} color={COLORS.accent} />
-            </View>
+                          <View
+                            style={
+                              styles.attentionTextWrap
+                            }
+                          >
+                            <Text
+                              style={styles.attentionLabel}
+                            >
+                              {item.label}
+                            </Text>
 
-            <Text style={styles.explainText}>
-              Learners only see{" "}
-              <Text style={styles.explainStrong}>bookable sessions</Text> they
-              can reserve in the app.
-            </Text>
-          </View>
-        </View>
+                            <Text
+                              style={styles.attentionAction}
+                            >
+                              {item.actionLabel}
+                            </Text>
+                          </View>
 
-        <Pressable
-          onPress={() => {
-            setShowTeacherExplainCard(false);
-            safePush("/(teacher)/sessions/create");
-          }}
-          style={styles.teacherExplainPrimaryButton}
-        >
-          <Text style={styles.teacherExplainPrimaryText}>Create session</Text>
-        </Pressable>
+                          <Ionicons
+                            name="chevron-forward"
+                            size={18}
+                            color={COLORS.textMuted}
+                          />
+                        </Pressable>
+                      ))}
+                    </View>
+                  </>
+                ) : (
+                  <Text style={styles.bodyText}>
+                    Nothing urgent right now.
+                  </Text>
+                )}
+              </DashboardCard>
 
-        <Pressable
-          onPress={handleDismissTeacherExplainCard}
-          style={styles.teacherExplainSecondaryButton}
-        >
-          <Text style={styles.teacherExplainSecondaryText}>Got it</Text>
-        </Pressable>
-      </View>
-    </View>
-  </Modal>
-) : null}
-
-<DashboardCard
-  icon="notifications-outline"
-  title="Needs attention"
->
-  {attentionSummary?.items?.length ? (
-    <>
-      <Text style={styles.bodyText}>
-        You have{" "}
-        {attentionSummary.total_action_items} teaching item
-        {attentionSummary.total_action_items === 1 ? "" : "s"}{" "}
-        that may need review.
-      </Text>
-
-      <View style={styles.actionStack}>
-        {attentionSummary.items.map((item) => (
-          <AppButton
-            key={item.type}
-            title={`${item.count} • ${item.label}`}
-            onPress={() => safePush(item.route as any)}
-            variant="secondary"
-          />
-        ))}
-      </View>
-    </>
-  ) : (
-    <Text style={styles.bodyText}>
-      Nothing urgent right now. Private requests,
-      missing arrival instructions, and refund
-      issues will appear here.
-    </Text>
-  )}
-</DashboardCard>
-
-              <DashboardCard icon="card-outline" title="Stripe payouts">
+              <DashboardCard
+                icon="card-outline"
+                title="Stripe payouts"
+              >
                 <Text style={styles.bodyText}>
                   {stripeReady
-                    ? "Your Stripe account is connected and ready to accept bookings and payouts."
-                    : "Complete Stripe onboarding before creating sessions and receiving payouts."}
+                    ? "Stripe is fully connected and ready."
+                    : "Complete Stripe onboarding before accepting bookings."}
                 </Text>
 
                 <View
@@ -434,33 +472,40 @@ setAttentionSummary(attentionRes);
                 </View>
 
                 {!stripeReady ? (
-                  <View style={styles.buttonTopGap}>
-                    <AppButton
-                      title={
-                        onboardingLoading
-                          ? "Opening Stripe..."
-                          : "Continue Stripe onboarding"
-                      }
-                      onPress={handleStripeOnboarding}
-                    />
-                  </View>
+                  <AppButton
+                    title={
+                      onboardingLoading
+                        ? "Opening Stripe..."
+                        : "Continue Stripe onboarding"
+                    }
+                    onPress={handleStripeOnboarding}
+                  />
                 ) : null}
               </DashboardCard>
 
-              <DashboardCard icon="calendar-outline" title="Sessions">
+              <DashboardCard
+                icon="calendar-outline"
+                title="Sessions"
+              >
                 <Text style={styles.bodyText}>
-                  Create bookable sessions, manage upcoming ones, and duplicate
-                  past ones quickly.
+                  Create and manage sessions.
                 </Text>
 
                 <View style={styles.actionStack}>
                   <AppButton
                     title="My sessions"
-                    onPress={() => safePush("/(teacher)/sessions")}
+                    onPress={() =>
+                      safePush("/(teacher)/sessions")
+                    }
                   />
+
                   <AppButton
                     title="Create session"
-                    onPress={() => safePush("/(teacher)/sessions/create")}
+                    onPress={() =>
+                      safePush(
+                        "/(teacher)/sessions/create"
+                      )
+                    }
                     variant="secondary"
                   />
                 </View>
@@ -468,124 +513,118 @@ setAttentionSummary(attentionRes);
 
               <DashboardCard
                 icon="trending-up-outline"
-                title="Learners near you want"
+                title="Nearby learner demand"
               >
-                <Text style={styles.bodyText}>
-                  Use nearby demand to decide what sessions to run next.
-                </Text>
-
                 {demandEmpty ? (
-                  <>
-                    <Text style={styles.bodyText}>
-                      No nearby demand yet. Once learners start requesting
-                      classes near your session areas, it will show here.
-                    </Text>
-
-                    <AppButton
-                      title="Create session anyway"
-                      onPress={() => safePush("/(teacher)/sessions/create")}
-                    />
-                  </>
+                  <Text style={styles.bodyText}>
+                    No nearby learner demand yet.
+                  </Text>
                 ) : (
                   <>
                     {topExistingCategories.length > 0 ? (
                       <View style={styles.listBlock}>
                         <Text style={styles.subheading}>
-                          Top requested categories
+                          Requested categories
                         </Text>
 
                         <View style={styles.listWrap}>
-                          {topExistingCategories.map((item) => (
-                            <View key={item.category} style={styles.listRow}>
-                              <Text style={styles.listLabel}>
-                                {item.category}
-                              </Text>
-                              <Text style={styles.listValue}>{item.count}</Text>
-                            </View>
-                          ))}
+                          {topExistingCategories.map(
+                            (item) => (
+                              <View
+                                key={item.category}
+                                style={styles.listRow}
+                              >
+                                <Text
+                                  style={styles.listLabel}
+                                >
+                                  {item.category}
+                                </Text>
+
+                                <Text
+                                  style={styles.listValue}
+                                >
+                                  {item.count}
+                                </Text>
+                              </View>
+                            )
+                          )}
                         </View>
                       </View>
                     ) : null}
 
                     {topCustomIdeas.length > 0 ? (
                       <View style={styles.listBlock}>
-                        <Text style={styles.subheading}>New class ideas</Text>
+                        <Text style={styles.subheading}>
+                          New class ideas
+                        </Text>
 
                         <View style={styles.listWrap}>
                           {topCustomIdeas.map((item) => (
-                            <View key={item.custom_title} style={styles.listRow}>
-                              <Text style={styles.listLabel}>
+                            <View
+                              key={item.custom_title}
+                              style={styles.listRow}
+                            >
+                              <Text
+                                style={styles.listLabel}
+                              >
                                 {item.custom_title}
                               </Text>
-                              <Text style={styles.listValue}>{item.count}</Text>
+
+                              <Text
+                                style={styles.listValue}
+                              >
+                                {item.count}
+                              </Text>
                             </View>
                           ))}
                         </View>
                       </View>
                     ) : null}
-
-                    <View style={styles.actionStack}>
-                      <AppButton
-                        title="Create session for this demand"
-                        onPress={() => safePush("/(teacher)/sessions/create")}
-                      />
-                      <AppButton
-                        title="Refresh demand"
-                        onPress={loadDashboard}
-                        variant="secondary"
-                      />
-                    </View>
                   </>
                 )}
               </DashboardCard>
 
               <DashboardCard
-                icon="chatbubble-ellipses-outline"
-                title="Private 1:1 requests"
+                icon="person-outline"
+                title="Profile"
               >
                 <Text style={styles.bodyText}>
-                  Review structured learner requests for private sessions and
-                  turn accepted ones into paid sessions in the app.
-                </Text>
-
-                <View style={styles.actionStack}>
-                  <AppButton
-                    title="View private requests"
-                    onPress={() =>
-                      safePush("/(teacher)/private-session-requests")
-                    }
-                  />
-                </View>
-              </DashboardCard>
-
-              <DashboardCard icon="person-outline" title="Profile">
-                <Text style={styles.bodyText}>
-                  Add your bio, profile image, and teaching identity so learners
-                  can trust and follow you.
+                  Update your teacher profile and
+                  teaching details.
                 </Text>
 
                 <AppButton
                   title="Edit profile"
-                  onPress={() => safePush("/(teacher)/profile")}
+                  onPress={() =>
+                    safePush("/(teacher)/profile")
+                  }
                 />
               </DashboardCard>
 
-
-              <DashboardCard icon="trash-outline" title="Delete account">
+              <DashboardCard
+                icon="trash-outline"
+                title="Delete account"
+              >
                 <Text style={styles.bodyText}>
-                  Permanently delete your account and all associated data.
+                  Permanently delete your account.
                 </Text>
 
-                <View style={{ marginTop: 10 }}>
-                  <Pressable onPress={handleDeleteAccount} style={styles.deleteButton}>
-                    <Text style={styles.deleteButtonText}>Delete account</Text>
-                  </Pressable>
-                </View>
+                <Pressable
+                  onPress={handleDeleteAccount}
+                  style={styles.deleteButton}
+                >
+                  <Text style={styles.deleteButtonText}>
+                    Delete account
+                  </Text>
+                </Pressable>
               </DashboardCard>
 
-              <DashboardCard icon="settings-outline" title="Account">
+              <DashboardCard
+                icon="settings-outline"
+                title="Account"
+              >
                 <Text style={styles.bodyText}>
-                  Sign out of your teacher account securely.
+                  Logout securely.
                 </Text>
 
                 <AppButton
@@ -594,11 +633,6 @@ setAttentionSummary(attentionRes);
                   variant="secondary"
                 />
               </DashboardCard>
-
-
-
-
-
             </>
           )}
         </ScrollView>
@@ -619,16 +653,16 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
 
-heroBadge: {
-  alignSelf: "flex-start",
-  paddingHorizontal: 12,
-  paddingVertical: 7,
-  borderRadius: 999,
-  backgroundColor: COLORS.accentSoft,
-  borderWidth: 1,
-  borderColor: COLORS.accentBorder,
-  marginBottom: 12,
-},
+  heroBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: COLORS.accentSoft,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+    marginBottom: 12,
+  },
 
   heroBadgeText: {
     color: COLORS.text,
@@ -640,49 +674,30 @@ heroBadge: {
     color: COLORS.text,
     fontSize: 30,
     fontWeight: "800",
-    lineHeight: 34,
     marginBottom: 8,
   },
-  deleteButton: {
-    minHeight: 48,
-    borderRadius: 16,
-    backgroundColor: "#8b000086",
-    borderWidth: 1,
-    borderColor: "#FF4D4D",
-    alignItems: "center",
-    justifyContent: "center",
-  },
 
-  deleteButtonText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "900",
-  },
   subtitle: {
     color: COLORS.textSoft,
     fontSize: 15,
     lineHeight: 22,
   },
 
-  explainWrap: {
-    marginBottom: 12,
+  cardOuter: {
+    borderRadius: 26,
+    borderWidth: 1.4,
+    borderColor: COLORS.borderStrong,
+    backgroundColor: COLORS.surface,
+    marginBottom: 16,
+    overflow: "hidden",
   },
 
-cardOuter: {
-  borderRadius: 26,
-  borderWidth: 1.4,
-  borderColor: COLORS.borderStrong,
-  backgroundColor: COLORS.surface,
-  marginBottom: 16,
-  overflow: "hidden",
-},
-
-cardInner: {
-  margin: 8,
-  borderRadius: 20,
-  backgroundColor: COLORS.surfaceDeep,
-  padding: 16,
-},
+  cardInner: {
+    margin: 8,
+    borderRadius: 20,
+    backgroundColor: COLORS.surfaceDeep,
+    padding: 16,
+  },
 
   cardHeaderRow: {
     flexDirection: "row",
@@ -690,24 +705,21 @@ cardInner: {
     marginBottom: 12,
   },
 
-iconCircle: {
-  width: 42,
-  height: 42,
-  borderRadius: 21,
-  backgroundColor: "rgba(168,85,247,0.18)",
-  borderWidth: 1,
-  borderColor: "rgba(168,85,247,0.30)",
-  alignItems: "center",
-  justifyContent: "center",
-  marginRight: 12,
-},
+  iconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(168,85,247,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
 
   cardHeaderTextWrap: {
     flex: 1,
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
+    alignItems: "center",
   },
 
   sectionTitle: {
@@ -724,76 +736,6 @@ iconCircle: {
     marginBottom: 12,
   },
 
-  metaBadge: {
-    alignSelf: "flex-start",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    marginBottom: 12,
-    borderWidth: 1,
-  },
-
-metaBadgeSuccess: {
-  backgroundColor: COLORS.successBg,
-  borderColor: COLORS.successBorder,
-},
-
-  metaBadgeWarning: {
-    backgroundColor: COLORS.accentSoft,
-    borderColor: COLORS.borderStrong,
-  },
-
-  metaBadgeText: {
-    color: COLORS.text,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
-  buttonTopGap: {
-    marginTop: 4,
-  },
-
-  subheading: {
-    color: COLORS.text,
-    fontSize: 16,
-    fontWeight: "800",
-    marginBottom: 10,
-  },
-
-  listBlock: {
-    marginBottom: 14,
-  },
-
-  listWrap: {
-    gap: 8,
-  },
-
-  listRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: COLORS.surfaceSoft,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-  },
-
-  listLabel: {
-    flex: 1,
-    color: COLORS.text,
-    fontSize: 15,
-    textTransform: "capitalize",
-  },
-
-  listValue: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-
   actionStack: {
     gap: 10,
   },
@@ -806,12 +748,138 @@ metaBadgeSuccess: {
 
   loadingText: {
     color: COLORS.textSoft,
-    fontSize: 14,
     marginTop: 10,
   },
+
+  metaBadge: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginBottom: 12,
+    borderWidth: 1,
+  },
+
+  metaBadgeSuccess: {
+    backgroundColor: COLORS.successBg,
+    borderColor: COLORS.successBorder,
+  },
+
+  metaBadgeWarning: {
+    backgroundColor: COLORS.warningBg,
+    borderColor: COLORS.warningBorder,
+  },
+
+  metaBadgeText: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  listBlock: {
+    marginBottom: 14,
+  },
+
+  subheading: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 10,
+  },
+
+  listWrap: {
+    gap: 8,
+  },
+
+  listRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    backgroundColor: COLORS.surfaceSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  listLabel: {
+    color: COLORS.text,
+    flex: 1,
+  },
+
+  listValue: {
+    color: COLORS.text,
+    fontWeight: "800",
+  },
+
+  attentionList: {
+    gap: 10,
+  },
+
+  attentionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: COLORS.surfaceSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  attentionRowHigh: {
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBg,
+  },
+
+  attentionCountPill: {
+    minWidth: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.accent,
+  },
+
+  attentionCountText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+  },
+
+  attentionTextWrap: {
+    flex: 1,
+  },
+
+  attentionLabel: {
+    color: COLORS.text,
+    fontWeight: "800",
+  },
+
+  attentionAction: {
+    marginTop: 2,
+    color: COLORS.textSoft,
+    fontSize: 12,
+  },
+
+  deleteButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: "#8b000086",
+    borderWidth: 1,
+    borderColor: "#FF4D4D",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  deleteButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+  },
+
   explainModalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.62)",
+    backgroundColor: "rgba(0,0,0,0.72)",
     justifyContent: "center",
     paddingHorizontal: 20,
   },
@@ -819,99 +887,4 @@ metaBadgeSuccess: {
   explainModalCard: {
     width: "100%",
   },
-
-  explainRow: {
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "flex-start",
-  },
-
-explainIconCircle: {
-  width: 38,
-  height: 38,
-  borderRadius: 19,
-  backgroundColor: "rgba(168,85,247,0.13)",
-  alignItems: "center",
-  justifyContent: "center",
-},
-
-explainStrong: {
-  color: "#7E22CE",
-  fontWeight: "900",
-},
-
-  explainText: {
-    flex: 1,
-    color: "#111827",
-    fontSize: 15,
-    lineHeight: 22,
-  },
-
-
-
-  explainDivider: {
-    height: 1,
-    backgroundColor: "rgba(0,0,0,0.08)",
-  },
-  teacherExplainCard: {
-  width: "100%",
-  borderRadius: 24,
-  backgroundColor: "#F8F2FF",
-  padding: 18,
-  borderWidth: 1.5,
-  borderColor: "rgba(168,85,247,0.28)",
-},
-
-teacherExplainTopIcon: {
-  width: 50,
-  height: 50,
-  borderRadius: 25,
-  backgroundColor: "rgba(168,85,247,0.13)",
-  alignItems: "center",
-  justifyContent: "center",
-  marginBottom: 14,
-},
-
-teacherExplainTitle: {
-  color: "#1A0B2E",
-  fontSize: 22,
-  fontWeight: "900",
-  marginBottom: 16,
-},
-
-teacherExplainBody: {
-  gap: 14,
-  marginBottom: 18,
-},
-
-teacherExplainPrimaryButton: {
-  minHeight: 48,
-  borderRadius: 14,
-  backgroundColor: COLORS.accent,
-  alignItems: "center",
-  justifyContent: "center",
-  marginBottom: 10,
-},
-
-teacherExplainPrimaryText: {
-  color: "#FFFFFF",
-  fontSize: 15,
-  fontWeight: "900",
-},
-
-teacherExplainSecondaryButton: {
-  minHeight: 48,
-  borderRadius: 14,
-  backgroundColor: "rgba(168,85,247,0.13)",
-  borderWidth: 1,
-  borderColor: "rgba(168,85,247,0.24)",
-  alignItems: "center",
-  justifyContent: "center",
-},
-
-teacherExplainSecondaryText: {
-  color: "#6B21A8",
-  fontSize: 15,
-  fontWeight: "900",
-},
 });

@@ -5,9 +5,11 @@ import { router } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { mediaUrl } from "@/src/utils/mediaUrl";
 import { autoCapitalize } from "@/src/utils/text";
+import { ExplainCard } from "@/src/components/ui/ExplainCard";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Image,
   Pressable,
   ScrollView,
@@ -135,7 +137,7 @@ export default function TeacherProfileScreen() {
   const [imageUrl1, setImageUrl1] = useState("");
   const [imageUrl2, setImageUrl2] = useState("");
   const [imageUrl3, setImageUrl3] = useState("");
-
+const [showIntroCard, setShowIntroCard] = useState(!hasTeacherProfile);
   const isEditing = useMemo(
     () => hasTeacherProfile || !!fullName || !!bio || !!profileImageUrl,
     [hasTeacherProfile, fullName, bio, profileImageUrl],
@@ -227,6 +229,15 @@ export default function TeacherProfileScreen() {
       return;
     }
 
+    if (!profileImageUrl.trim()) {
+  Alert.alert(
+    "Profile photo required",
+    "Please upload at least a profile photo before creating your teacher profile."
+  );
+
+  return;
+}
+
     const galleryImages = [imageUrl1, imageUrl2, imageUrl3]
       .map((item) => item.trim())
       .filter(Boolean);
@@ -305,6 +316,25 @@ export default function TeacherProfileScreen() {
           contentContainerStyle={styles.screen}
           showsVerticalScrollIndicator={false}
         >
+          {showIntroCard && !hasTeacherProfile ? (
+  <Modal transparent visible animationType="fade">
+    <View style={styles.explainModalBackdrop}>
+      <View style={styles.explainModalCard}>
+      <ExplainCard
+  title="Become a teacher on Elevator"
+  iconName="person-circle-outline"
+  body="Create your teacher profile so learners can discover and trust you.
+
+Profiles with clear photos and friendly descriptions usually get more bookings."
+  ctaText="Create profile"
+  onPressCta={() => setShowIntroCard(false)}
+  dismissText="Maybe later"
+  onDismiss={() => setShowIntroCard(false)}
+/>
+      </View>
+    </View>
+  </Modal>
+) : null}
           <View style={styles.hero}>
             <View style={styles.heroBadge}>
               <Text style={styles.heroBadgeText}>Teacher workspace</Text>
@@ -875,7 +905,16 @@ previewAvatarFallbackText: {
   fontSize: 28,
   fontWeight: "900",
 },
+explainModalBackdrop: {
+  flex: 1,
+  backgroundColor: "rgba(0,0,0,0.72)",
+  justifyContent: "center",
+  paddingHorizontal: 20,
+},
 
+explainModalCard: {
+  width: "100%",
+},
 previewName: {
   color: COLORS.text,
   fontSize: 24,

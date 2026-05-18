@@ -19,7 +19,6 @@ import {
   View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ExplainCard } from "../../src/components/ui/ExplainCard";
 import { useMapViewStore } from "../../src/store/mapView.store";
 
 import {
@@ -34,7 +33,8 @@ import { authStore } from "../../src/store/auth.store";
 import {
   hasSeenExplainCard,
   markExplainCardSeen,
-} from "../../src/utils/explainCard";
+} from "@/src/utils/explainCard";
+import { ExplainCard } from "@/src/components/ui/ExplainCard";
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_PUBLIC_TOKEN!);
 
@@ -1498,19 +1498,25 @@ cameraRef.current?.setCamera({
             </Mapbox.ShapeSource>
           ) : null}
 
-          {showCustomMarkers &&
-            sessions
-              .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng))
-              .map((s) => {
-                const isSelected = selectedSessionId === s.sessionId;
+{showCustomMarkers &&
+  sessions
+    .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng))
+    .map((s, index) => {
+      const isSelected = selectedSessionId === s.sessionId;
 
-                return (
-                  <Mapbox.MarkerView
-                    key={s.sessionId}
-                    coordinate={[s.lng, s.lat]}
-                    allowOverlap
-                    anchor={{ x: 0.5, y: 1 }}
-                  >
+      const markerLng =
+        s.lng + ((index % 3) - 1) * 0.00008;
+
+      const markerLat =
+        s.lat + (Math.floor(index / 3) % 3 - 1) * 0.00008;
+
+      return (
+        <Mapbox.MarkerView
+          key={s.sessionId}
+          coordinate={[markerLng, markerLat]}
+          allowOverlap
+          anchor={{ x: 0.5, y: 1 }}
+        >
                     <View style={styles.markerWrap} collapsable={false}>
                       <Pressable
                         onPress={() => {
@@ -2273,7 +2279,7 @@ mapLoadingOverlay: {
 
   explainModalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.62)",
+    backgroundColor: "rgba(0,0,0,0.72)",
     justifyContent: "center",
     paddingHorizontal: 20,
   },
@@ -2299,7 +2305,7 @@ mapLoadingOverlay: {
 
   explainText: {
     flex: 1,
-    color: "#111827",
+    color: COLORS.text,
     fontSize: 15,
     lineHeight: 22,
   },
