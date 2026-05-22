@@ -20,7 +20,7 @@
   [
     "@rnmapbox/maps",
     {
-      "RNMapboxMapsDownloadToken": "${MAPBOX_DOWNLOAD_TOKEN}"
+      "RNMAPBOX_MAPS_DOWNLOAD_TOKEN": "${MAPBOX_DOWNLOAD_TOKEN}"
     }
   ],
   "@react-native-community/datetimepicker"
