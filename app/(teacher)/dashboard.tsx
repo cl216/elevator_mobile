@@ -18,7 +18,7 @@ import {
 import { deleteAccount } from "@/src/api/auth";
 import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import { getNearbyTeacherDemand } from "../../src/api/classRequests";
-import { api } from "../../src/api/client";
+import { api, markApiLogoutFinished } from "../../src/api/client";
 import { ExplainCard } from "../../src/components/ui/ExplainCard";
 import { authStore } from "../../src/store/auth.store";
 import {
@@ -289,10 +289,10 @@ useEffect(() => {
     );
   };
 
-  async function handleLogout() {
-    await authStore.getState().logout();
-    safeReplace("/(auth)/login");
-  }
+async function handleLogout() {
+  await authStore.getState().logout();
+  safeReplace("/(auth)/login");
+}
 
   return (
     <AppLayout>

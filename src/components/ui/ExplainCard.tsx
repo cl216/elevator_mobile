@@ -10,6 +10,9 @@ type ExplainCardProps = {
   dismissText?: string;
   onDismiss?: () => void;
   iconName?: keyof typeof Ionicons.glyphMap;
+  accentColor?: string;
+backgroundColor?: string;
+borderColor?: string;
 };
 
 const COLORS = {
@@ -34,12 +37,23 @@ export function ExplainCard({
   dismissText = "Got it",
   onDismiss,
   iconName = "shield-checkmark-outline",
+  accentColor = COLORS.accent,
+  backgroundColor = COLORS.surface,
+  borderColor = COLORS.borderStrong,
 }: ExplainCardProps) {
   return (
-    <View style={styles.card}>
-      <View style={styles.iconWrap}>
-        <Ionicons name={iconName} size={24} color={COLORS.accent} />
-      </View>
+    <View style={[styles.card, { backgroundColor, borderColor }]}>
+  <View
+    style={[
+      styles.iconWrap,
+      {
+        backgroundColor: `${accentColor}22`,
+        borderColor: `${accentColor}55`,
+      },
+    ]}
+  >
+    <Ionicons name={iconName} size={24} color={accentColor} />
+  </View>
 
       <Text style={styles.title}>{title}</Text>
 
@@ -56,9 +70,13 @@ export function ExplainCard({
           <Pressable
             onPress={onPressCta}
             style={({ pressed }) => [
-              styles.primaryButton,
-              pressed && styles.buttonPressed,
-            ]}
+  styles.primaryButton,
+  {
+    backgroundColor: accentColor,
+    borderColor: `${accentColor}66`,
+  },
+  pressed && styles.buttonPressed,
+]}
           >
             <Text style={styles.primaryButtonText}>{ctaText}</Text>
           </Pressable>

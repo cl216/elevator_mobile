@@ -1405,39 +1405,36 @@ const handleDismissMapExplainCard = useCallback(() => {
   }}
 />
 
-          <Mapbox.UserLocation
-            visible
-            androidRenderMode="gps"
-            showsUserHeadingIndicator={false}
-onUpdate={(location) => {
-const lng = location?.coords?.longitude;
-const lat = location?.coords?.latitude;
+ <Mapbox.UserLocation
+  visible
+  androidRenderMode="normal"
+  showsUserHeadingIndicator={false}
+  minDisplacement={50}
+  onUpdate={(location) => {
+    const lng = location?.coords?.longitude;
+    const lat = location?.coords?.latitude;
 
-if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
 
-const nextLocation: [number, number] = [lng, lat];
+    const nextLocation: [number, number] = [lng, lat];
 
-setUserLocation(nextLocation);
-setLocError(null);
+    setUserLocation(nextLocation);
+    setLocError(null);
+    setIsInitialLocationResolved(true);
 
-// IMPORTANT
-setIsInitialLocationResolved(true);
+    if (!hasCenteredOnInitialLocationRef.current) {
+      hasCenteredOnInitialLocationRef.current = true;
 
-if (!hasCenteredOnInitialLocationRef.current) {
-hasCenteredOnInitialLocationRef.current = true;
+      cameraRef.current?.setCamera({
+        centerCoordinate: nextLocation,
+        zoomLevel: 13.5,
+        animationDuration: 0,
+      });
+    }
+  }}
+/>
 
-
-cameraRef.current?.setCamera({
-  centerCoordinate: nextLocation,
-  zoomLevel: 13.5,
-  animationDuration: 0,
-});
-
-
-}
-}}
-
-          />
+          
 
           {showClusterSource ? (
             <Mapbox.ShapeSource
@@ -1546,6 +1543,8 @@ cameraRef.current?.setCamera({
                 );
               })}
         </Mapbox.MapView>
+
+<View pointerEvents="none" style={styles.mapLiftOverlay} />
 
 {!isInitialLocationResolved ? (
             <View style={styles.mapLoadingOverlay}>
@@ -2019,6 +2018,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 10,
   },
+
+  mapLiftOverlay: {
+  ...StyleSheet.absoluteFillObject,
+  backgroundColor: "rgba(255,255,255,0.025)",
+  zIndex: 1,
+  elevation: 1,
+},
   searchTopButton: {
     minHeight: 44,
     paddingHorizontal: 18,

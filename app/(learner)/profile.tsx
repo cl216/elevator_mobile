@@ -12,7 +12,7 @@ import {
   Text,
   View,
 } from "react-native";
-
+import { markApiLogoutFinished } from "@/src/api/client";
 import { deleteAccount } from "@/src/api/auth";
 import { api } from "@/src/api/client";
 import { uploadImage } from "@/src/api/uploads";
@@ -162,10 +162,14 @@ const params = useLocalSearchParams<{
     ? String(params.returnToSessionId)
     : "";
 
-  const handleLogout = async () => {
+const handleLogout = async () => {
+  try {
     await logout();
+  } finally {
+    markApiLogoutFinished();
     safeReplace("/(auth)/login");
-  };
+  }
+};
 
   async function handleChooseProfilePhoto() {
     try {

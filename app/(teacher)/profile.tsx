@@ -320,7 +320,7 @@ const [showIntroCard, setShowIntroCard] = useState(!hasTeacherProfile);
   <Modal transparent visible animationType="fade">
     <View style={styles.explainModalBackdrop}>
       <View style={styles.explainModalCard}>
-      <ExplainCard
+<ExplainCard
   title="Become a teacher on Elevator"
   iconName="person-circle-outline"
   body="Create your teacher profile so learners can discover and trust you.
@@ -330,6 +330,9 @@ Profiles with clear photos and friendly descriptions usually get more bookings."
   onPressCta={() => setShowIntroCard(false)}
   dismissText="Maybe later"
   onDismiss={() => setShowIntroCard(false)}
+  accentColor={COLORS.accentStrong}
+  backgroundColor={COLORS.teacherCard}
+  borderColor={COLORS.accentBorder}
 />
       </View>
     </View>

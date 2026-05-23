@@ -31,7 +31,6 @@ export default function Header() {
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
 
   const lastSegment = segments[segments.length - 1];
-  const isProfile = lastSegment === "profile";
 
   const isNotifications =
     pathname.includes("notifications") ||
@@ -40,6 +39,11 @@ export default function Header() {
   const isTeacherRoute =
     pathname.includes("/(teacher)") ||
     segments.some((segment) => String(segment).includes("teacher"));
+
+  const isLearnerProfile =
+    pathname.includes("/(learner)/profile") ||
+    (segments.some((segment) => String(segment).includes("learner")) &&
+      lastSegment === "profile");
 
   const accent = isTeacherRoute ? TEACHER_PURPLE : BLUE_BORDER;
 
@@ -65,7 +69,7 @@ export default function Header() {
   };
 
   const handleMenuPress = () => {
-    if (isProfile) return;
+    if (isLearnerProfile) return;
     safePush("/(learner)/profile");
   };
 
@@ -76,9 +80,7 @@ export default function Header() {
         {
           paddingTop: insets.top,
           height: NAV_HEIGHT + insets.top,
-          borderBottomColor: isTeacherRoute
-            ? "rgba(168,85,247,0.42)"
-            : "rgba(110,145,255,0.28)",
+          borderBottomColor: accent,
         },
       ]}
     >
@@ -134,7 +136,7 @@ export default function Header() {
 
 const styles = StyleSheet.create({
   header: {
-    borderBottomWidth: 1.2,
+    borderBottomWidth: 4,
     backgroundColor: BLACK_BG,
     paddingHorizontal: 10,
   },

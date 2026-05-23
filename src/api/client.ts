@@ -1,4 +1,5 @@
 import axios from "axios";
+import { router } from "expo-router";
 import { API_BASE_URL } from "./config";
 import { authStore } from "../store/auth.store";
 
@@ -9,6 +10,28 @@ export const api = axios.create({
 
 let refreshPromise: Promise<string | null> | null = null;
 let isLoggingOut = false;
+let hasRedirectedToLogin = false;
+
+async function forceLogoutAndRedirect() {
+  if (hasRedirectedToLogin) return;
+
+  hasRedirectedToLogin = true;
+  isLoggingOut = true;
+
+  try {
+    await authStore.getState().logout?.();
+  } catch (e) {
+    console.log("forceLogoutAndRedirect logout error", e);
+  } finally {
+    refreshPromise = null;
+    router.replace("/(auth)/login");
+
+    setTimeout(() => {
+      isLoggingOut = false;
+      hasRedirectedToLogin = false;
+    }, 1000);
+  }
+}
 
 api.interceptors.request.use((config) => {
   const token = authStore.getState().token;
@@ -33,14 +56,13 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const isAuthRoute =
-      url.includes("/auth/login") ||
-      url.includes("/auth/register") ||
-      url.includes("/auth/refresh") ||
-      url.includes("/auth/logout");
+    const isLoginOrRegisterRoute =
+      url.includes("/auth/login") || url.includes("/auth/register");
 
-    if (url.includes("/auth/logout")) {
-      isLoggingOut = true;
+    const isRefreshRoute = url.includes("/auth/refresh");
+    const isLogoutRoute = url.includes("/auth/logout");
+
+    if (isLogoutRoute) {
       return Promise.reject(error);
     }
 
@@ -48,29 +70,40 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    if (status === 401 && isRefreshRoute) {
+      await forceLogoutAndRedirect();
+      return Promise.reject(error);
+    }
+
     if (
       status === 401 &&
       !originalRequest._retry &&
-      !isAuthRoute &&
+      !isLoginOrRegisterRoute &&
       !isLoggingOut
     ) {
       originalRequest._retry = true;
 
-      if (!refreshPromise) {
-        refreshPromise = authStore
-          .getState()
-          .refreshAccessToken()
-          .finally(() => {
-            refreshPromise = null;
-          });
-      }
+      try {
+        if (!refreshPromise) {
+          refreshPromise = authStore
+            .getState()
+            .refreshAccessToken()
+            .finally(() => {
+              refreshPromise = null;
+            });
+        }
 
-      const newToken = await refreshPromise;
+        const newToken = await refreshPromise;
 
-      if (newToken && !isLoggingOut) {
-        originalRequest.headers = originalRequest.headers ?? {};
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        return api(originalRequest);
+        if (newToken && !isLoggingOut) {
+          originalRequest.headers = originalRequest.headers ?? {};
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          return api(originalRequest);
+        }
+
+        await forceLogoutAndRedirect();
+      } catch (e) {
+        await forceLogoutAndRedirect();
       }
     }
 

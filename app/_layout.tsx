@@ -198,8 +198,7 @@ export default function RootLayout() {
         return;
       }
 
-       safeReplace("/(learner)/notifications");
-    };
+safeReplace("/(learner)/map");    };
 
     const receivedSub = Notifications.addNotificationReceivedListener(
       (notification) => {
@@ -212,16 +211,6 @@ export default function RootLayout() {
         const data: any = response.notification.request.content.data;
         handleNotificationNavigation(data);
       });
-
-    const handleInitialNotification = async () => {
-      const response = await Notifications.getLastNotificationResponseAsync();
-      if (!response) return;
-
-      const data: any = response.notification.request.content.data;
-      handleNotificationNavigation(data);
-    };
-
-    void handleInitialNotification();
 
     return () => {
       receivedSub.remove();
