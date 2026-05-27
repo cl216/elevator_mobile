@@ -82,7 +82,7 @@ export default function RootLayout() {
         const refreshedToken = await state.refreshAccessToken();
 
         if (!refreshedToken) {
-           safeReplace("/(auth)/login");
+          safeReplace("/(auth)/login");
           return;
         }
 
@@ -90,7 +90,7 @@ export default function RootLayout() {
       } catch (error) {
         console.error("Session refresh on resume failed:", error);
         await authStore.getState().logout();
-         safeReplace("/(auth)/login");
+        safeReplace("/(auth)/login");
       }
     };
 
@@ -127,38 +127,38 @@ export default function RootLayout() {
         type === "session_reminder_1h"
       ) {
         if (bookingId) {
-           safePush({
+          safePush({
             pathname: "/(learner)/booking/[id]",
             params: { id: String(bookingId) },
           });
           return;
         }
 
-         safeReplace("/(learner)/bookings");
+        safeReplace("/(learner)/bookings");
         return;
       }
 
       if (type === "review_reminder") {
         if (bookingId) {
-           safePush({
+          safePush({
             pathname: "/(learner)/review/[bookingId]",
             params: { bookingId: String(bookingId) },
           });
           return;
         }
 
-         safeReplace("/(learner)/bookings");
+        safeReplace("/(learner)/bookings");
         return;
       }
 
       if (type === "private_session_request_declined") {
-         safeReplace("/(learner)/notifications");
+        safeReplace("/(learner)/notifications");
         return;
       }
 
       if (type === "private_session_request_accepted") {
         if (sessionId) {
-           safePush({
+          safePush({
             pathname: "/(modal)/session/[id]",
             params: { id: String(sessionId) },
           });
@@ -166,16 +166,16 @@ export default function RootLayout() {
         }
 
         if (privateSessionRequestId) {
-           safeReplace("/(learner)/notifications");
+          safeReplace("/(learner)/notifications");
           return;
         }
 
-         safeReplace("/(learner)/notifications");
+        safeReplace("/(learner)/notifications");
         return;
       }
 
       if (type === "private_session_request_created") {
-         safePush("/(teacher)/private-session-requests");
+        safePush("/(teacher)/private-session-requests");
         return;
       }
 
@@ -187,18 +187,19 @@ export default function RootLayout() {
         type === "teacher_session_reminder_1h"
       ) {
         if (sessionId) {
-           safePush({
+          safePush({
             pathname: "/(teacher)/sessions/[id]",
             params: { id: String(sessionId) },
           });
           return;
         }
 
-         safeReplace("/(teacher)/sessions");
+        safeReplace("/(teacher)/sessions");
         return;
       }
 
-safeReplace("/(learner)/map");    };
+      safeReplace("/(learner)/map");
+    };
 
     const receivedSub = Notifications.addNotificationReceivedListener(
       (notification) => {
@@ -219,23 +220,23 @@ safeReplace("/(learner)/map");    };
   }, []);
 
   return (
-  <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#000000" }}>
-    <SafeAreaProvider>
-      <BottomSheetModalProvider>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            animation: "slide_from_right",
-            gestureEnabled: true,
-            contentStyle: {
-              backgroundColor: "#000000",
-            },
-          }}
-        />
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#000000" }}>
+      <SafeAreaProvider>
+        <BottomSheetModalProvider>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              animation: "slide_from_right",
+              gestureEnabled: true,
+              contentStyle: {
+                backgroundColor: "#000000",
+              },
+            }}
+          />
 
-        <AppToast />
-      </BottomSheetModalProvider>
-    </SafeAreaProvider>
-  </GestureHandlerRootView>
-);
+          <AppToast />
+        </BottomSheetModalProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
 }

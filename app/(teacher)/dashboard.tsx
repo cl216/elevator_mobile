@@ -363,7 +363,13 @@ Good photos and beginner-friendly sessions usually perform best."
     handleDismissTeacherExplainCard();
   }}
   dismissText="Maybe later"
-  onDismiss={handleDismissTeacherExplainCard}
+  onDismiss={() => {
+    handleDismissTeacherExplainCard();
+    safeReplace("/(learner)/map");
+  }}
+   accentColor={COLORS.accentStrong}
+  backgroundColor={COLORS.surface}
+  borderColor={COLORS.accentBorder}
 />
                     </View>
                   </View>

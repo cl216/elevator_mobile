@@ -2,8 +2,7 @@ import AuthScreenShell, {
   AUTH_COLORS as COLORS,
 } from "@/src/components/auth/AuthScreenShell";
 import { authStyles as styles } from "@/src/components/auth/authStyles";
-import { safeReplace } from "@/src/utils/safeRouter";
-import * as Linking from "expo-linking";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import { useState } from "react";
 import { Alert, Pressable, Text, TextInput } from "react-native";
 import { api } from "../../src/api/client";
@@ -13,46 +12,32 @@ export default function ForgotPasswordScreen() {
   const [loading, setLoading] = useState(false);
 
   async function handleForgotPassword() {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      Alert.alert("Email required", "Please enter your email address.");
+      return;
+    }
+
     try {
       setLoading(true);
 
       const res = await api.post("/auth/forgot-password", {
-        email: email.trim().toLowerCase(),
+        email: normalizedEmail,
       });
 
       const message =
         res?.data?.message ??
-        "If an account exists for that email, a reset link has been sent.";
-
-      const devResetUrl: string | undefined = res?.data?.dev_reset_url;
-
-      if (devResetUrl) {
-        Alert.alert("Check your email", message, [
-          {
-            text: "Open reset link",
-            onPress: async () => {
-              try {
-                await Linking.openURL(devResetUrl);
-              } catch {
-                Alert.alert(
-                  "Could not open link",
-                  `Open this manually:\n\n${devResetUrl}`,
-                );
-              }
-            },
-          },
-          {
-            text: "Back to login",
-            onPress: () => safeReplace("/(auth)/login"),
-          },
-        ]);
-        return;
-      }
+        "If an account exists for that email, a reset code has been sent.";
 
       Alert.alert("Check your email", message, [
         {
-          text: "Back to login",
-          onPress: () => safeReplace("/(auth)/login"),
+          text: "Enter code",
+          onPress: () =>
+            safePush({
+              pathname: "/(auth)/reset-password",
+              params: { email: normalizedEmail },
+            }),
         },
       ]);
     } catch (e: any) {
@@ -72,13 +57,13 @@ export default function ForgotPasswordScreen() {
       <Text style={styles.title}>Forgot password</Text>
 
       <Text style={styles.subtitle}>
-        Enter your email and we&apos;ll send you a password reset link.
+        Enter your email and we&apos;ll send you a 6-digit reset code.
       </Text>
 
       <TextInput
         value={email}
         onChangeText={setEmail}
-        autoCapitalize="sentences"
+        autoCapitalize="none"
         keyboardType="email-address"
         placeholder="Email"
         placeholderTextColor={COLORS.textMuted}
@@ -91,7 +76,7 @@ export default function ForgotPasswordScreen() {
         style={[styles.button, loading && styles.buttonDisabled]}
       >
         <Text style={styles.buttonText}>
-          {loading ? "Sending..." : "Send reset link"}
+          {loading ? "Sending..." : "Send reset code"}
         </Text>
       </Pressable>
 

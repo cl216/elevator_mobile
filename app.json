@@ -7,37 +7,41 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-"plugins": [
-  "expo-router",
-  "expo-dev-client",
-  "expo-notifications",
-  [
-    "expo-location",
-    {
-      "locationWhenInUsePermission": "Elevator uses your location to show nearby classes."
-    }
-  ],
-  [
-    "@rnmapbox/maps",
-    {
-      "RNMAPBOX_MAPS_DOWNLOAD_TOKEN": "${MAPBOX_DOWNLOAD_TOKEN}"
-    }
-  ],
-  "@react-native-community/datetimepicker"
-],
+    "icon": "./assets/adaptive-icon.png",
+    "plugins": [
+        "./plugins/withAndroidLaunchMode",
+      "expo-router",
+      "expo-dev-client",
+      "expo-notifications",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Elevator uses your location to show nearby classes."
+        }
+      ],
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMAPBOX_MAPS_DOWNLOAD_TOKEN": "${MAPBOX_DOWNLOAD_TOKEN}"
+        }
+      ],
+      "@react-native-community/datetimepicker"
+    ],
     "android": {
-      "package": "com.yourcompany.elevator",
+      "package": "com.clawlor.elevator",
+        "versionCode": 1,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION"
       ],
+      "launchMode": "singleTask",
       "adaptiveIcon": {
-        "foregroundImaggetExpoPushTokenAsynce": "./assets/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#061348"
       }
     },
     "ios": {
-      "bundleIdentifier": "com.yourcompany.elevator",
+      "bundleIdentifier": "com.clawlor.elevator",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "We use your location to show nearby classes."
       }

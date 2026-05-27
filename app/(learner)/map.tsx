@@ -1404,36 +1404,6 @@ const handleDismissMapExplainCard = useCallback(() => {
     heading: 0,
   }}
 />
-
- <Mapbox.UserLocation
-  visible
-  androidRenderMode="normal"
-  showsUserHeadingIndicator={false}
-  minDisplacement={50}
-  onUpdate={(location) => {
-    const lng = location?.coords?.longitude;
-    const lat = location?.coords?.latitude;
-
-    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
-
-    const nextLocation: [number, number] = [lng, lat];
-
-    setUserLocation(nextLocation);
-    setLocError(null);
-    setIsInitialLocationResolved(true);
-
-    if (!hasCenteredOnInitialLocationRef.current) {
-      hasCenteredOnInitialLocationRef.current = true;
-
-      cameraRef.current?.setCamera({
-        centerCoordinate: nextLocation,
-        zoomLevel: 13.5,
-        animationDuration: 0,
-      });
-    }
-  }}
-/>
-
           
 
           {showClusterSource ? (
@@ -1509,42 +1479,44 @@ const handleDismissMapExplainCard = useCallback(() => {
 
       return (
         <Mapbox.MarkerView
-          key={s.sessionId}
-          coordinate={[markerLng, markerLat]}
-          allowOverlap
-          anchor={{ x: 0.5, y: 1 }}
-        >
-                    <View style={styles.markerWrap} collapsable={false}>
-                      <Pressable
-                        onPress={() => {
-                          setSelectedSessionId(s.sessionId);
+  key={s.sessionId}
+  coordinate={[markerLng, markerLat]}
+  allowOverlap
+  anchor={{ x: 0.5, y: 1 }}
+>
+  <Pressable
+    collapsable={false}
+    hitSlop={20}
+    onPress={() => {
+      setSelectedSessionId(s.sessionId);
 
-                          cameraRef.current?.setCamera({
-                            centerCoordinate: [s.lng, s.lat],
-                            zoomLevel: Math.max(currentZoomRef.current, CLUSTER_SWITCH_ZOOM + 0.5),
-                            animationDuration: 250,
-                          });
+      cameraRef.current?.setCamera({
+        centerCoordinate: [s.lng, s.lat],
+        zoomLevel: Math.max(
+          currentZoomRef.current,
+          CLUSTER_SWITCH_ZOOM + 0.5,
+        ),
+        animationDuration: 250,
+      });
 
-                          openSessionSheet(s.sessionId);
-                        }}
-                        style={[
-                          styles.markerPressable,
-                          isSelected && styles.markerPressableSelected,
-                        ]}
-                      >
-                        <TeacherMarker
-                          avatarUrl={s.teacherAvatarUrl}
-                          category={normalizeCategory(s.sessionCategory)}
-                          selected={isSelected}
-                        />
-                      </Pressable>
-                    </View>
-                  </Mapbox.MarkerView>
+      openSessionSheet(s.sessionId);
+    }}
+    style={[
+      styles.markerPressable,
+      isSelected && styles.markerPressableSelected,
+    ]}
+  >
+    <TeacherMarker
+      avatarUrl={s.teacherAvatarUrl}
+      category={normalizeCategory(s.sessionCategory)}
+      selected={isSelected}
+    />
+  </Pressable>
+</Mapbox.MarkerView>
                 );
               })}
         </Mapbox.MapView>
 
-<View pointerEvents="none" style={styles.mapLiftOverlay} />
 
 {!isInitialLocationResolved ? (
             <View style={styles.mapLoadingOverlay}>
@@ -1783,9 +1755,9 @@ const handleDismissMapExplainCard = useCallback(() => {
                 </View>
 
                 <Text style={styles.explainText}>
-                  Move around the map, choose a category, then tap{" "}
+                  Move around the map, then tap{" "}
                   <Text style={styles.explainStrong}>Search this area</Text>{" "}
-                  to refresh results.
+                  to refresh results. Choose a category to filter results.
                 </Text>
               </View>
 
@@ -1799,9 +1771,23 @@ const handleDismissMapExplainCard = useCallback(() => {
                 <Text style={styles.explainText}>
                   If nothing is nearby, use{" "}
                   <Text style={styles.explainStrong}>Request class in this area</Text>{" "}
-                  so teachers can see local demand.
+                  so teachers can see local demand... or become a teacher yourself!
                 </Text>
               </View>
+
+              <View style={styles.explainDivider} />
+
+<View style={styles.explainRow}>
+  <View style={styles.explainIconCircle}>
+    <Ionicons name="person-outline" size={22} color="#3F6AE0" />
+  </View>
+
+  <Text style={styles.explainText}>
+    Don&apos;t forget — you can also book{" "}
+    <Text style={styles.explainStrong}>1:1 sessions</Text>{" "}
+    directly through a teacher&apos;s profile.
+  </Text>
+</View>
             </View>
           }
           dismissText="Got it"
@@ -2019,12 +2005,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  mapLiftOverlay: {
-  ...StyleSheet.absoluteFillObject,
-  backgroundColor: "rgba(255,255,255,0.025)",
-  zIndex: 1,
-  elevation: 1,
-},
   searchTopButton: {
     minHeight: 44,
     paddingHorizontal: 18,
@@ -2148,12 +2128,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
   },
 
-  markerWrap: {
-    width: 82,
-    height: 100,
-    alignItems: "center",
-    justifyContent: "flex-start",
-  },
+
   markerPressable: {
     width: 82,
     height: 100,

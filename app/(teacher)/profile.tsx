@@ -205,7 +205,7 @@ const [showIntroCard, setShowIntroCard] = useState(!hasTeacherProfile);
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      allowsEditing: false,
       quality: 0.55,
     });
 
@@ -329,7 +329,10 @@ Profiles with clear photos and friendly descriptions usually get more bookings."
   ctaText="Create profile"
   onPressCta={() => setShowIntroCard(false)}
   dismissText="Maybe later"
-  onDismiss={() => setShowIntroCard(false)}
+onDismiss={() => {
+  setShowIntroCard(false);
+  safeReplace("/(learner)/map");
+}}
   accentColor={COLORS.accentStrong}
   backgroundColor={COLORS.teacherCard}
   borderColor={COLORS.accentBorder}

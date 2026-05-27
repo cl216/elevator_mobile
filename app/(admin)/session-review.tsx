@@ -42,10 +42,20 @@ type PendingSession = {
   id: string;
   start_time: string;
   price: number | string;
+  duration?: number;
+  max_participants?: number;
   review_status?: string;
   title?: string;
   category?: string;
+  description?: string;
+  rough_location?: string;
+  arrival_instructions?: string;
+  image_urls?: string[];
   teacher_id?: string;
+  teacher?: {
+    email?: string;
+    first_name?: string;
+  };
 };
 
 function formatDate(value?: string) {
@@ -60,6 +70,12 @@ function formatDate(value?: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatPrice(value?: number | string) {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return "€0.00";
+  return `€${n.toFixed(2)}`;
 }
 
 export default function AdminSessionReviewScreen() {
@@ -241,8 +257,10 @@ export default function AdminSessionReviewScreen() {
                       <Text style={styles.cardTitle}>
                         {session.title || "Untitled session"}
                       </Text>
+
                       <Text style={styles.cardBody}>
-                        {session.category || "Category"} · €{session.price ?? 0}
+                        {session.category || "Category"} ·{" "}
+                        {formatPrice(session.price)}
                       </Text>
                     </View>
                   </View>
@@ -250,6 +268,40 @@ export default function AdminSessionReviewScreen() {
                   <Text style={styles.metaText}>
                     {formatDate(session.start_time)}
                   </Text>
+
+                  <Text style={styles.detailText}>
+                    Teacher:{" "}
+                    {session.teacher?.email ?? session.teacher_id ?? "Unknown"}
+                  </Text>
+
+                  <Text style={styles.detailText}>
+                    Duration: {session.duration ?? "?"} mins · Capacity:{" "}
+                    {session.max_participants ?? "?"}
+                  </Text>
+
+                  <Text style={styles.detailText}>
+                    Location: {session.rough_location || "No public location"}
+                  </Text>
+
+                  {session.description ? (
+                    <View style={styles.detailBox}>
+                      <Text style={styles.detailLabel}>Description</Text>
+                      <Text style={styles.detailBody}>
+                        {session.description}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {session.arrival_instructions ? (
+                    <View style={styles.detailBox}>
+                      <Text style={styles.detailLabel}>
+                        Arrival instructions
+                      </Text>
+                      <Text style={styles.detailBody}>
+                        {session.arrival_instructions}
+                      </Text>
+                    </View>
+                  ) : null}
 
                   <Text style={styles.idText}>ID: {session.id}</Text>
 
@@ -400,10 +452,42 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
+  detailText: {
+    color: COLORS.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 5,
+  },
+
+  detailBox: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  detailLabel: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+
+  detailBody: {
+    color: COLORS.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
   idText: {
     color: COLORS.textMuted,
     fontSize: 11,
     lineHeight: 16,
+    marginTop: 10,
   },
 
   actionRow: {

@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
-
+import { mediaUrl } from "@/src/utils/mediaUrl";
 import {
   approveCategory,
   approveClassRequest,
@@ -93,6 +93,27 @@ function Section({
   );
 }
 
+function formatPrice(value?: number | string) {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return "€0.00";
+  return `€${n.toFixed(2)}`;
+}
+
+function formatDate(value?: string) {
+  if (!value) return "No date";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Invalid date";
+
+  return date.toLocaleString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function AdminDashboardScreen() {
   const [loading, setLoading] = useState(true);
 
@@ -135,7 +156,6 @@ export default function AdminDashboardScreen() {
       setDisputes(disputesData || []);
     } catch (e) {
       console.log(e);
-
       Alert.alert("Error", "Could not load admin dashboard");
     } finally {
       setLoading(false);
@@ -165,10 +185,7 @@ export default function AdminDashboardScreen() {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-    >
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Admin Dashboard</Text>
 
       <View style={styles.summaryRow}>
@@ -190,9 +207,7 @@ export default function AdminDashboardScreen() {
         </View>
 
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryNumber}>
-            {disputes.length}
-          </Text>
+          <Text style={styles.summaryNumber}>{disputes.length}</Text>
           <Text style={styles.summaryLabel}>Disputes</Text>
         </View>
       </View>
@@ -200,66 +215,44 @@ export default function AdminDashboardScreen() {
       <Section title="Disputes & No-Shows" count={disputes.length}>
         {disputes.map((booking) => {
           const isTeacherNoShow =
-            booking.dispute_reason ===
-            "teacher_no_show_reported";
+            booking.dispute_reason === "teacher_no_show_reported";
 
           const isLearnerNoShow =
-            booking.dispute_reason ===
-            "learner_no_show_reported";
+            booking.dispute_reason === "learner_no_show_reported";
 
           return (
-            <View
-              key={booking.id}
-              style={[
-                styles.card,
-                styles.warningCard,
-              ]}
-            >
+            <View key={booking.id} style={[styles.card, styles.warningCard]}>
               <Text style={styles.cardTitle}>
                 {booking.session?.class?.title || "Booking"}
               </Text>
 
-              <Text style={styles.cardText}>
-                Learner: {booking.user?.email}
-              </Text>
+              <Text style={styles.cardText}>Learner: {booking.user?.email}</Text>
 
               <Text style={styles.cardText}>
-                Teacher:{" "}
-                {booking.session?.teacher?.email}
+                Teacher: {booking.session?.teacher?.email}
               </Text>
 
               <Text style={styles.cardMuted}>
-                Reason:{" "}
-                {booking.dispute_reason || "General dispute"}
+                Reason: {booking.dispute_reason || "General dispute"}
               </Text>
 
               <View style={styles.financialBox}>
                 <Text style={styles.financialText}>
-                  Lesson: €
-                  {(
-                    (booking.lesson_amount || 0) / 100
-                  ).toFixed(2)}
+                  Lesson: €{((booking.lesson_amount || 0) / 100).toFixed(2)}
                 </Text>
 
                 <Text style={styles.financialText}>
                   Platform Fee: €
-                  {(
-                    (booking.platform_fee_amount || 0) / 100
-                  ).toFixed(2)}
+                  {((booking.platform_fee_amount || 0) / 100).toFixed(2)}
                 </Text>
 
                 <Text style={styles.financialText}>
                   Stripe Fee: €
-                  {(
-                    (booking.stripe_fee_amount || 0) / 100
-                  ).toFixed(2)}
+                  {((booking.stripe_fee_amount || 0) / 100).toFixed(2)}
                 </Text>
 
                 <Text style={styles.financialTotal}>
-                  Total: €
-                  {(
-                    (booking.total_amount || 0) / 100
-                  ).toFixed(2)}
+                  Total: €{((booking.total_amount || 0) / 100).toFixed(2)}
                 </Text>
               </View>
 
@@ -267,16 +260,10 @@ export default function AdminDashboardScreen() {
                 {isLearnerNoShow ? (
                   <Pressable
                     onPress={async () => {
-                      await approveLearnerNoShow(
-                        booking.id,
-                      );
-
+                      await approveLearnerNoShow(booking.id);
                       load();
                     }}
-                    style={[
-                      styles.actionButton,
-                      styles.successButton,
-                    ]}
+                    style={[styles.actionButton, styles.successButton]}
                   >
                     <Text style={styles.actionButtonText}>
                       Approve Learner No-Show
@@ -291,67 +278,42 @@ export default function AdminDashboardScreen() {
                         "Refund learner?",
                         "This will approve the teacher no-show and trigger a refund.",
                         [
-                          {
-                            text: "Cancel",
-                            style: "cancel",
-                          },
+                          { text: "Cancel", style: "cancel" },
                           {
                             text: "Refund",
                             style: "destructive",
                             onPress: async () => {
-                              await approveTeacherNoShow(
-                                booking.id,
-                              );
-
+                              await approveTeacherNoShow(booking.id);
                               load();
                             },
                           },
                         ],
                       );
                     }}
-                    style={[
-                      styles.actionButton,
-                      styles.dangerButton,
-                    ]}
+                    style={[styles.actionButton, styles.dangerButton]}
                   >
-                    <Text style={styles.actionButtonText}>
-                      Refund Learner
-                    </Text>
+                    <Text style={styles.actionButtonText}>Refund Learner</Text>
                   </Pressable>
                 ) : null}
 
                 <Pressable
                   onPress={async () => {
-                    await markBookingCompleted(
-                      booking.id,
-                    );
-
+                    await markBookingCompleted(booking.id);
                     load();
                   }}
-                  style={[
-                    styles.actionButton,
-                    styles.infoButton,
-                  ]}
+                  style={[styles.actionButton, styles.infoButton]}
                 >
-                  <Text style={styles.actionButtonText}>
-                    Mark Completed
-                  </Text>
+                  <Text style={styles.actionButtonText}>Mark Completed</Text>
                 </Pressable>
 
                 <Pressable
                   onPress={async () => {
                     await rejectDispute(booking.id);
-
                     load();
                   }}
-                  style={[
-                    styles.actionButton,
-                    styles.successButton,
-                  ]}
+                  style={[styles.actionButton, styles.successButton]}
                 >
-                  <Text style={styles.actionButtonText}>
-                    Reject Dispute
-                  </Text>
+                  <Text style={styles.actionButtonText}>Reject Dispute</Text>
                 </Pressable>
               </View>
             </View>
@@ -359,246 +321,219 @@ export default function AdminDashboardScreen() {
         })}
       </Section>
 
-<Section title="Pending Sessions" count={sessions.length}>
-  {sessions.map((session) => (
-    <View key={session.id} style={styles.card}>
-      <Text style={styles.cardTitle}>
-        {session.class?.title}
-      </Text>
+      <Section title="Pending Sessions" count={sessions.length}>
+        {sessions.map((session) => {
+          const title = session.class?.title ?? session.title ?? "Untitled session";
+          const category = session.class?.category ?? session.category ?? "Category";
+          const description =
+            session.class?.description ?? session.description ?? null;
 
-      <Text style={styles.cardText}>
-        Teacher: {session.teacher?.email}
-      </Text>
+          return (
+            <View key={session.id} style={styles.card}>
+              <Text style={styles.cardTitle}>{title}</Text>
 
-      <View style={styles.rowWrap}>
-        <Pressable
-          onPress={async () => {
-            await approveSession(session.id);
-            load();
-          }}
-          style={[
-            styles.actionButton,
-            styles.successButton,
-          ]}
-        >
-          <Text style={styles.actionButtonText}>
-            Approve
-          </Text>
-        </Pressable>
+              <Text style={styles.cardText}>Category: {category}</Text>
 
-        <Pressable
-          onPress={async () => {
-            await rejectSession(session.id);
-            load();
-          }}
-          style={[
-            styles.actionButton,
-            styles.dangerButton,
-          ]}
-        >
-          <Text style={styles.actionButtonText}>
-            Reject
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  ))}
-</Section>
+              <Text style={styles.cardText}>
+                Teacher: {session.teacher?.email ?? "Unknown"}
+              </Text>
 
-<Section title="Image Moderation" count={images.length}>
-  {images.map((img, index) => (
-    <View key={index} style={styles.card}>
-      <Image
-        source={{ uri: img.image_url }}
-        style={{
-          width: "100%",
-          height: 220,
-          borderRadius: 14,
-          marginBottom: 12,
-        }}
-        resizeMode="cover"
-      />
+              <Text style={styles.cardText}>
+                Price: {formatPrice(session.price)}
+              </Text>
 
-      <Text style={styles.cardMuted}>
-        {img.source_type}
-      </Text>
+              <Text style={styles.cardText}>
+                Duration: {session.duration ?? "?"} mins · Capacity:{" "}
+                {session.max_participants ?? "?"}
+              </Text>
 
-      <Text style={styles.cardText}>
-        Field: {img.field}
-      </Text>
+              <Text style={styles.cardText}>
+                Start: {formatDate(session.start_time)}
+              </Text>
 
-      <Pressable
-        onPress={async () => {
-          await removeAdminImage({
-            source_type: img.source_type,
-            source_id: img.source_id,
-            field: img.field,
-          });
+              <Text style={styles.cardText}>
+                Public location: {session.rough_location || "Not provided"}
+              </Text>
 
-          load();
-        }}
-        style={[
-          styles.actionButton,
-          styles.dangerButton,
-        ]}
-      >
-        <Text style={styles.actionButtonText}>
-          Remove Image
-        </Text>
-      </Pressable>
-    </View>
-  ))}
-</Section>
+              {description ? (
+                <View style={styles.detailBox}>
+                  <Text style={styles.detailLabel}>Description</Text>
+                  <Text style={styles.detailBody}>{description}</Text>
+                </View>
+              ) : null}
 
-<Section title="Pending Categories" count={categories.length}>
-  {categories.map((category) => (
-    <View key={category.id} style={styles.card}>
-      <Text style={styles.cardTitle}>
-        {category.label}
-      </Text>
+              {session.arrival_instructions ? (
+                <View style={styles.detailBox}>
+                  <Text style={styles.detailLabel}>Arrival instructions</Text>
+                  <Text style={styles.detailBody}>
+                    {session.arrival_instructions}
+                  </Text>
+                </View>
+              ) : null}
 
-      <View style={styles.rowWrap}>
-        <Pressable
-          onPress={async () => {
-            await approveCategory(category.id);
-            load();
-          }}
-          style={[
-            styles.actionButton,
-            styles.successButton,
-          ]}
-        >
-          <Text style={styles.actionButtonText}>
-            Approve
-          </Text>
-        </Pressable>
+              <View style={styles.rowWrap}>
+                <Pressable
+                  onPress={async () => {
+                    await approveSession(session.id);
+                    load();
+                  }}
+                  style={[styles.actionButton, styles.successButton]}
+                >
+                  <Text style={styles.actionButtonText}>Approve</Text>
+                </Pressable>
 
-        <Pressable
-          onPress={async () => {
-            await rejectCategory(category.id);
-            load();
-          }}
-          style={[
-            styles.actionButton,
-            styles.dangerButton,
-          ]}
-        >
-          <Text style={styles.actionButtonText}>
-            Reject
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  ))}
-</Section>
+                <Pressable
+                  onPress={async () => {
+                    await rejectSession(session.id);
+                    load();
+                  }}
+                  style={[styles.actionButton, styles.dangerButton]}
+                >
+                  <Text style={styles.actionButtonText}>Reject</Text>
+                </Pressable>
+              </View>
+            </View>
+          );
+        })}
+      </Section>
 
-<Section
-  title="Class Requests"
-  count={classRequests.length}
->
-  {classRequests.map((request) => (
-    <View key={request.id} style={styles.card}>
-      <Text style={styles.cardTitle}>
-        {request.custom_title ||
-          request.category}
-      </Text>
+      <Section title="Image Moderation" count={images.length}>
+        {images.map((img, index) => (
+          <View key={index} style={styles.card}>
+            <Image
+              source={{ uri: mediaUrl(img.image_url) ?? undefined }}
+              style={styles.moderationImage}
+              resizeMode="cover"
+              onError={(e) => {
+                console.log("ADMIN IMAGE LOAD FAILED", {
+                  raw: img.image_url,
+                  resolved: mediaUrl(img.image_url),
+                  error: e.nativeEvent,
+                });
+              }}
+            />
 
-      <Text style={styles.cardText}>
-        Type: {request.request_type}
-      </Text>
+            <Text style={styles.cardMuted}>{img.source_type}</Text>
 
-      <Text style={styles.cardMuted}>
-        {request.note}
-      </Text>
+            <Text style={styles.cardText}>Field: {img.field}</Text>
 
-      <View style={styles.rowWrap}>
-        <Pressable
-          onPress={async () => {
-            await approveClassRequest(
-              request.id,
-            );
+            <Pressable
+              onPress={async () => {
+                await removeAdminImage({
+                  source_type: img.source_type,
+                  source_id: img.source_id,
+                  field: img.field,
+                });
 
-            load();
-          }}
-          style={[
-            styles.actionButton,
-            styles.successButton,
-          ]}
-        >
-          <Text style={styles.actionButtonText}>
-            Approve
-          </Text>
-        </Pressable>
+                load();
+              }}
+              style={[styles.actionButton, styles.dangerButton]}
+            >
+              <Text style={styles.actionButtonText}>Remove Image</Text>
+            </Pressable>
+          </View>
+        ))}
+      </Section>
 
-        <Pressable
-          onPress={async () => {
-            await rejectClassRequest(
-              request.id,
-            );
+      <Section title="Pending Categories" count={categories.length}>
+        {categories.map((category) => (
+          <View key={category.id} style={styles.card}>
+            <Text style={styles.cardTitle}>{category.label}</Text>
 
-            load();
-          }}
-          style={[
-            styles.actionButton,
-            styles.dangerButton,
-          ]}
-        >
-          <Text style={styles.actionButtonText}>
-            Reject
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  ))}
-</Section>
+            <View style={styles.rowWrap}>
+              <Pressable
+                onPress={async () => {
+                  await approveCategory(category.id);
+                  load();
+                }}
+                style={[styles.actionButton, styles.successButton]}
+              >
+                <Text style={styles.actionButtonText}>Approve</Text>
+              </Pressable>
 
-<Section title="Users" count={users.length}>
-  {users.map((user) => (
-    <View key={user.id} style={styles.card}>
-      <Text style={styles.cardTitle}>
-        {user.email}
-      </Text>
+              <Pressable
+                onPress={async () => {
+                  await rejectCategory(category.id);
+                  load();
+                }}
+                style={[styles.actionButton, styles.dangerButton]}
+              >
+                <Text style={styles.actionButtonText}>Reject</Text>
+              </Pressable>
+            </View>
+          </View>
+        ))}
+      </Section>
 
-      <Text style={styles.cardMuted}>
-        Role: {user.role}
-      </Text>
-
-      <View style={styles.rowWrap}>
-        {user.is_suspended ? (
-          <Pressable
-            onPress={async () => {
-              await unsuspendUser(user.id);
-              load();
-            }}
-            style={[
-              styles.actionButton,
-              styles.successButton,
-            ]}
-          >
-            <Text style={styles.actionButtonText}>
-              Unsuspend
+      <Section title="Class Requests" count={classRequests.length}>
+        {classRequests.map((request) => (
+          <View key={request.id} style={styles.card}>
+            <Text style={styles.cardTitle}>
+              {request.custom_title || request.category}
             </Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            onPress={async () => {
-              await suspendUser(user.id);
-              load();
-            }}
-            style={[
-              styles.actionButton,
-              styles.dangerButton,
-            ]}
-          >
-            <Text style={styles.actionButtonText}>
-              Suspend
-            </Text>
-          </Pressable>
-        )}
-      </View>
-    </View>
-  ))}
-</Section>
+
+            <Text style={styles.cardText}>Type: {request.request_type}</Text>
+
+            <Text style={styles.cardMuted}>{request.note}</Text>
+
+            <View style={styles.rowWrap}>
+              <Pressable
+                onPress={async () => {
+                  await approveClassRequest(request.id);
+                  load();
+                }}
+                style={[styles.actionButton, styles.successButton]}
+              >
+                <Text style={styles.actionButtonText}>Approve</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={async () => {
+                  await rejectClassRequest(request.id);
+                  load();
+                }}
+                style={[styles.actionButton, styles.dangerButton]}
+              >
+                <Text style={styles.actionButtonText}>Reject</Text>
+              </Pressable>
+            </View>
+          </View>
+        ))}
+      </Section>
+
+      <Section title="Users" count={users.length}>
+        {users.map((user) => (
+          <View key={user.id} style={styles.card}>
+            <Text style={styles.cardTitle}>{user.email}</Text>
+
+            <Text style={styles.cardMuted}>Role: {user.role}</Text>
+
+            <View style={styles.rowWrap}>
+              {user.is_suspended ? (
+                <Pressable
+                  onPress={async () => {
+                    await unsuspendUser(user.id);
+                    load();
+                  }}
+                  style={[styles.actionButton, styles.successButton]}
+                >
+                  <Text style={styles.actionButtonText}>Unsuspend</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={async () => {
+                    await suspendUser(user.id);
+                    load();
+                  }}
+                  style={[styles.actionButton, styles.dangerButton]}
+                >
+                  <Text style={styles.actionButtonText}>Suspend</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        ))}
+      </Section>
     </ScrollView>
   );
 }
@@ -739,6 +674,38 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontWeight: "900",
     marginTop: 8,
+  },
+
+  detailBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  detailLabel: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+
+  detailBody: {
+    color: COLORS.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  moderationImage: {
+    width: "100%",
+    height: 220,
+    borderRadius: 14,
+    marginBottom: 12,
+    backgroundColor: "rgba(255,255,255,0.04)",
   },
 
   rowWrap: {

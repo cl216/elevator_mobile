@@ -199,7 +199,7 @@ export default function CreateSessionScreen({
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      allowsEditing: false,
       quality: 0.55,
     });
 
@@ -719,8 +719,9 @@ Add a clear title, photos, price, date, and teaching area.
 Your exact address stays private until somebody books."
           ctaText="Start creating"
           onPressCta={handleDismissSessionExplainCard}
-          dismissText="Got it"
-          onDismiss={handleDismissSessionExplainCard}
+            accentColor={COLORS.accentStrong}
+  backgroundColor={COLORS.surface}
+  borderColor={COLORS.accentBorder}
         />
       </View>
     </View>
@@ -801,7 +802,10 @@ Your exact address stays private until somebody books."
                 </View>
 
                 <Pressable
-                  onPress={() => safePush("/(modal)/propose-category")}
+                  onPress={() => safePush({
+  pathname: "/(modal)/propose-category",
+  params: { mode: "teacher" },
+})}
                   style={styles.suggestCategoryButton}
                 >
                   <Ionicons name="add-circle-outline" size={18} color={COLORS.text} />

@@ -4,7 +4,7 @@ import { router, usePathname, useSegments } from "expo-router";
 import React, { useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { safePush } from "@/src/utils/safeRouter";
+import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import { authStore } from "@/src/store/auth.store";
 
 const BLACK_BG = "#000000";
@@ -78,10 +78,10 @@ export default function Footer({
         return routeName.includes("(learner)") && routeName.includes("map");
       });
 
-      if (mapIndex === -1) {
-        safePush("/(learner)/map");
-        return CommonActions.setParams({});
-      }
+if (mapIndex === -1) {
+  safeReplace("/(learner)/map");
+  return CommonActions.setParams({});
+}
 
       return CommonActions.reset({
         ...state,

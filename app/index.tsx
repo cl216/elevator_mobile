@@ -1,6 +1,6 @@
-import { Redirect } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { authStore } from '../src/store/auth.store';
+import { Redirect } from "expo-router";
+import { useEffect, useState } from "react";
+import { authStore } from "../src/store/auth.store";
 
 export default function Index() {
   const [hydrated, setHydrated] = useState(authStore.getState().hydrated);
