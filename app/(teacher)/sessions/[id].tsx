@@ -4,13 +4,16 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { api } from "../../../src/api/client";
+import { reportLearnerNoShow } from "../../../src/api/bookings";
 import { getSessionBookings } from "../../../src/api/sessions";
 import AppLayout from "@/src/components/layout/AppLayout";
 import { AppScreen } from "@/src/components/ui/AppScreen";
@@ -74,6 +77,9 @@ type SessionBookingRow = {
     | "CANCELLED_BY_TEACHER"
     | "REFUND_PENDING"
     | "REFUNDED"
+    | "DISPUTED"
+    | "LEARNER_NO_SHOW"
+    | "TEACHER_NO_SHOW"
     | "EXPIRED"
     | string;
   intro_message?: string | null;
@@ -111,6 +117,12 @@ function statusLabel(status?: string) {
       return "Refund in progress";
     case "REFUNDED":
       return "Refund completed";
+    case "DISPUTED":
+      return "Under review";
+    case "LEARNER_NO_SHOW":
+      return "Learner no-show";
+    case "TEACHER_NO_SHOW":
+      return "Teacher no-show";
     case "EXPIRED":
       return "Expired";
     default:
@@ -128,6 +140,7 @@ function getStatusStyles(status?: string) {
       };
     case "PENDING":
     case "REFUND_PENDING":
+    case "DISPUTED":
       return {
         backgroundColor: COLORS.warningBg,
         borderColor: COLORS.warningBorder,
@@ -135,6 +148,8 @@ function getStatusStyles(status?: string) {
       };
     case "CANCELLED_BY_LEARNER":
     case "CANCELLED_BY_TEACHER":
+    case "LEARNER_NO_SHOW":
+    case "TEACHER_NO_SHOW":
       return {
         backgroundColor: COLORS.dangerBg,
         borderColor: COLORS.dangerBorder,
@@ -147,11 +162,6 @@ function getStatusStyles(status?: string) {
         textColor: COLORS.infoText,
       };
     case "EXPIRED":
-      return {
-        backgroundColor: COLORS.neutralBg,
-        borderColor: COLORS.neutralBorder,
-        textColor: COLORS.neutralText,
-      };
     default:
       return {
         backgroundColor: COLORS.neutralBg,
@@ -175,6 +185,10 @@ function getTeacherBookingStatusDescription(status?: string) {
       return "The learner’s refund is being processed.";
     case "REFUNDED":
       return "The learner’s refund has been completed.";
+    case "DISPUTED":
+      return "This booking is under admin review.";
+    case "LEARNER_NO_SHOW":
+      return "This learner no-show has been approved.";
     case "EXPIRED":
       return "This booking expired before payment was completed.";
     default:
@@ -189,6 +203,12 @@ export default function TeacherSessionDetailScreen() {
   const [data, setData] = useState<SessionBookingsResponse | null>(null);
   const [busyBookingId, setBusyBookingId] = useState<string | null>(null);
 
+  const [noShowModalVisible, setNoShowModalVisible] = useState(false);
+  const [noShowBooking, setNoShowBooking] = useState<SessionBookingRow | null>(
+    null,
+  );
+  const [noShowComment, setNoShowComment] = useState("");
+
   const loadSessionBookings = useCallback(async () => {
     const result = (await getSessionBookings(id!)) as SessionBookingsResponse;
     setData(result);
@@ -200,7 +220,9 @@ export default function TeacherSessionDetailScreen() {
     (async () => {
       try {
         setLoading(true);
-        const result = (await getSessionBookings(id!)) as SessionBookingsResponse;
+        const result = (await getSessionBookings(
+          id!,
+        )) as SessionBookingsResponse;
 
         if (!alive) return;
         setData(result);
@@ -230,6 +252,12 @@ export default function TeacherSessionDetailScreen() {
     },
     [session?.start_time],
   );
+
+  function canReportLearnerNoShow(bookingStatus?: string) {
+    if (!session?.start_time) return false;
+    const hasStarted = new Date(session.start_time).getTime() < Date.now();
+    return bookingStatus === "CONFIRMED" && hasStarted;
+  }
 
   const handleCancelBooking = useCallback(
     (bookingId: string, learnerName?: string | null) => {
@@ -275,6 +303,50 @@ export default function TeacherSessionDetailScreen() {
     },
     [loadSessionBookings],
   );
+
+  function openNoShowModal(booking: SessionBookingRow) {
+    setNoShowBooking(booking);
+    setNoShowComment("");
+    setNoShowModalVisible(true);
+  }
+
+  async function submitLearnerNoShow() {
+    if (!noShowBooking) return;
+
+    try {
+      setBusyBookingId(noShowBooking.id);
+
+      await reportLearnerNoShow(
+        noShowBooking.id,
+        noShowComment.trim().slice(0, 200),
+      );
+
+      setNoShowModalVisible(false);
+      setNoShowBooking(null);
+      setNoShowComment("");
+
+      await loadSessionBookings();
+
+      Alert.alert(
+        "Report submitted",
+        "Your learner no-show report has been sent to admin for review.",
+      );
+    } catch (e: any) {
+      console.error(e);
+
+      const message =
+        e?.response?.data?.message ??
+        e?.message ??
+        "Could not report learner no-show.";
+
+      Alert.alert(
+        "Report failed",
+        Array.isArray(message) ? message.join("\n") : String(message),
+      );
+    } finally {
+      setBusyBookingId(null);
+    }
+  }
 
   return (
     <AppLayout>
@@ -361,21 +433,34 @@ export default function TeacherSessionDetailScreen() {
 
                   <View style={styles.chipsRow}>
                     <View style={styles.chip}>
-                      <Ionicons name="time-outline" size={14} color={COLORS.text} />
+                      <Ionicons
+                        name="time-outline"
+                        size={14}
+                        color={COLORS.text}
+                      />
                       <Text style={styles.chipText}>{session.duration} min</Text>
                     </View>
 
                     <View style={styles.chip}>
-                      <Ionicons name="people-outline" size={14} color={COLORS.text} />
+                      <Ionicons
+                        name="people-outline"
+                        size={14}
+                        color={COLORS.text}
+                      />
                       <Text style={styles.chipText}>
                         Max {session.max_participants}
                       </Text>
                     </View>
 
                     <View style={styles.chip}>
-                      <Ionicons name="ticket-outline" size={14} color={COLORS.text} />
+                      <Ionicons
+                        name="ticket-outline"
+                        size={14}
+                        color={COLORS.text}
+                      />
                       <Text style={styles.chipText}>
-                        {bookings.length} booking{bookings.length === 1 ? "" : "s"}
+                        {bookings.length} booking
+                        {bookings.length === 1 ? "" : "s"}
                       </Text>
                     </View>
                   </View>
@@ -414,7 +499,8 @@ export default function TeacherSessionDetailScreen() {
                   </Text>
 
                   <Text style={styles.bodyText}>
-                    Cancel bookings carefully, especially close to session start.
+                    After the session starts, use learner no-show reporting only
+                    if the learner did not attend.
                   </Text>
                 </View>
               </View>
@@ -432,7 +518,12 @@ export default function TeacherSessionDetailScreen() {
                 <View style={styles.bookingStack}>
                   {bookings.map((booking: SessionBookingRow) => {
                     const statusStyles = getStatusStyles(booking.status);
-                    const showCancelButton = canTeacherCancelBooking(booking.status);
+                    const showCancelButton = canTeacherCancelBooking(
+                      booking.status,
+                    );
+                    const showNoShowButton = canReportLearnerNoShow(
+                      booking.status,
+                    );
                     const isBusy = busyBookingId === booking.id;
                     const statusDescription = getTeacherBookingStatusDescription(
                       booking.status,
@@ -491,35 +582,68 @@ export default function TeacherSessionDetailScreen() {
 
                           {statusDescription ? (
                             <View style={styles.statusDescriptionBox}>
-                              <Text style={styles.bodyText}>{statusDescription}</Text>
+                              <Text style={styles.bodyText}>
+                                {statusDescription}
+                              </Text>
                             </View>
                           ) : null}
 
-                          {showCancelButton ? (
+                          {showCancelButton || showNoShowButton ? (
                             <View style={styles.bookingFooter}>
-                              <Pressable
-                                onPress={() =>
-                                  handleCancelBooking(
-                                    booking.id,
-                                    booking.learner_first_name || null,
-                                  )
-                                }
-                                disabled={isBusy}
-                                style={({ pressed }) => [
-                                  styles.cancelButton,
-                                  isBusy && styles.cancelButtonDisabled,
-                                  pressed && !isBusy && styles.cancelButtonPressed,
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.cancelButtonText,
-                                    isBusy && styles.cancelButtonTextDisabled,
+                              {showCancelButton ? (
+                                <Pressable
+                                  onPress={() =>
+                                    handleCancelBooking(
+                                      booking.id,
+                                      booking.learner_first_name || null,
+                                    )
+                                  }
+                                  disabled={isBusy}
+                                  style={({ pressed }) => [
+                                    styles.cancelButton,
+                                    isBusy && styles.cancelButtonDisabled,
+                                    pressed &&
+                                      !isBusy &&
+                                      styles.cancelButtonPressed,
                                   ]}
                                 >
-                                  {isBusy ? "Cancelling..." : "Cancel booking"}
-                                </Text>
-                              </Pressable>
+                                  <Text
+                                    style={[
+                                      styles.cancelButtonText,
+                                      isBusy && styles.cancelButtonTextDisabled,
+                                    ]}
+                                  >
+                                    {isBusy
+                                      ? "Cancelling..."
+                                      : "Cancel booking"}
+                                  </Text>
+                                </Pressable>
+                              ) : null}
+
+                              {showNoShowButton ? (
+                                <Pressable
+                                  onPress={() => openNoShowModal(booking)}
+                                  disabled={isBusy}
+                                  style={({ pressed }) => [
+                                    styles.noShowButton,
+                                    isBusy && styles.cancelButtonDisabled,
+                                    pressed &&
+                                      !isBusy &&
+                                      styles.cancelButtonPressed,
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.noShowButtonText,
+                                      isBusy && styles.cancelButtonTextDisabled,
+                                    ]}
+                                  >
+                                    {isBusy
+                                      ? "Submitting..."
+                                      : "Report learner no-show"}
+                                  </Text>
+                                </Pressable>
+                              ) : null}
                             </View>
                           ) : null}
                         </View>
@@ -531,6 +655,66 @@ export default function TeacherSessionDetailScreen() {
             </>
           )}
         </ScrollView>
+
+        <Modal
+          visible={noShowModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setNoShowModalVisible(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Report learner no-show</Text>
+
+              <Text style={styles.modalBody}>
+                Briefly explain what happened
+                {noShowBooking?.learner_first_name
+                  ? ` with ${noShowBooking.learner_first_name}`
+                  : ""}
+                . Admin will review this before payout is approved.
+              </Text>
+
+              <TextInput
+                value={noShowComment}
+                onChangeText={(text) => setNoShowComment(text.slice(0, 200))}
+                placeholder="Example: I waited 15 minutes at the agreed spot."
+                placeholderTextColor={COLORS.textMuted}
+                multiline
+                maxLength={200}
+                style={styles.modalInput}
+              />
+
+              <Text style={styles.characterCount}>
+                {noShowComment.length}/200
+              </Text>
+
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => {
+                    setNoShowModalVisible(false);
+                    setNoShowBooking(null);
+                    setNoShowComment("");
+                  }}
+                  style={styles.modalCancelButton}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={submitLearnerNoShow}
+                  disabled={!noShowBooking || busyBookingId === noShowBooking.id}
+                  style={styles.modalSubmitButton}
+                >
+                  <Text style={styles.modalSubmitText}>
+                    {busyBookingId === noShowBooking?.id
+                      ? "Submitting..."
+                      : "Submit report"}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </AppScreen>
     </AppLayout>
   );
@@ -547,73 +731,74 @@ const styles = StyleSheet.create({
   hero: {
     marginBottom: 22,
   },
-heroBadge: {
-  alignSelf: "flex-start",
-  paddingHorizontal: 12,
-  paddingVertical: 7,
-  borderRadius: 999,
-  backgroundColor: COLORS.accentStrong,
-  borderWidth: 1,
-  borderColor: COLORS.accentBorder,
-  marginBottom: 12,
-},
 
-cardOuter: {
-  borderRadius: 26,
-  borderWidth: 1.4,
-  borderColor: COLORS.borderStrong,
-  backgroundColor: COLORS.teacherCard,
-  marginBottom: 14,
-  overflow: "hidden",
-},
+  heroBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: COLORS.accentStrong,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+    marginBottom: 12,
+  },
 
-warningCardOuter: {
-  borderRadius: 26,
-  borderWidth: 1.4,
-  borderColor: COLORS.warningBorder,
-  backgroundColor: COLORS.teacherCard,
-  marginBottom: 14,
-  overflow: "hidden",
-},
+  cardOuter: {
+    borderRadius: 26,
+    borderWidth: 1.4,
+    borderColor: COLORS.borderStrong,
+    backgroundColor: COLORS.teacherCard,
+    marginBottom: 14,
+    overflow: "hidden",
+  },
 
-cardInner: {
-  margin: 8,
-  borderRadius: 18,
-  backgroundColor: COLORS.teacherCardInner,
-  padding: 16,
-},
+  warningCardOuter: {
+    borderRadius: 26,
+    borderWidth: 1.4,
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.teacherCard,
+    marginBottom: 14,
+    overflow: "hidden",
+  },
 
-topButton: {
-  minHeight: 42,
-  paddingHorizontal: 14,
-  borderRadius: 14,
-  borderWidth: 1,
-  borderColor: COLORS.accentBorder,
-  backgroundColor: COLORS.surfaceSoft,
-  alignItems: "center",
-  justifyContent: "center",
-},
+  cardInner: {
+    margin: 8,
+    borderRadius: 18,
+    backgroundColor: COLORS.teacherCardInner,
+    padding: 16,
+  },
 
-chip: {
-  flexDirection: "row",
-  alignItems: "center",
-  gap: 6,
-  backgroundColor: COLORS.surfaceSoft,
-  borderWidth: 1,
-  borderColor: COLORS.accentBorder,
-  paddingHorizontal: 10,
-  paddingVertical: 8,
-  borderRadius: 999,
-},
+  topButton: {
+    minHeight: 42,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+    backgroundColor: COLORS.surfaceSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
-messageBox: {
-  marginTop: 14,
-  borderRadius: 14,
-  backgroundColor: COLORS.surfaceSoft,
-  borderWidth: 1,
-  borderColor: COLORS.accentBorder,
-  padding: 12,
-},
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: COLORS.surfaceSoft,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+
+  messageBox: {
+    marginTop: 14,
+    borderRadius: 14,
+    backgroundColor: COLORS.surfaceSoft,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+    padding: 12,
+  },
 
   heroBadgeText: {
     color: COLORS.text,
@@ -650,8 +835,6 @@ messageBox: {
     flexDirection: "row",
     gap: 8,
   },
-
-
 
   topButtonPressed: {
     opacity: 0.86,
@@ -835,6 +1018,8 @@ messageBox: {
     borderTopColor: COLORS.divider,
     flexDirection: "row",
     justifyContent: "flex-end",
+    flexWrap: "wrap",
+    gap: 10,
   },
 
   cancelButton: {
@@ -862,5 +1047,104 @@ messageBox: {
 
   cancelButtonTextDisabled: {
     color: COLORS.textMuted,
+  },
+
+  noShowButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBg,
+  },
+
+  noShowButtonText: {
+    fontWeight: "900",
+    color: COLORS.warningText,
+  },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+
+  modalCard: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 22,
+    padding: 18,
+    backgroundColor: COLORS.teacherCardInner,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+  },
+
+  modalTitle: {
+    color: COLORS.text,
+    fontSize: 20,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+
+  modalBody: {
+    color: COLORS.textSoft,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+
+  modalInput: {
+    minHeight: 96,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+    backgroundColor: COLORS.surfaceSoft,
+    color: COLORS.text,
+    padding: 12,
+    textAlignVertical: "top",
+  },
+
+  characterCount: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    textAlign: "right",
+    marginTop: 6,
+  },
+
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 14,
+  },
+
+  modalCancelButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceSoft,
+  },
+
+  modalCancelText: {
+    color: COLORS.text,
+    fontWeight: "800",
+  },
+
+  modalSubmitButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBg,
+  },
+
+  modalSubmitText: {
+    color: COLORS.warningText,
+    fontWeight: "900",
   },
 });

@@ -1135,7 +1135,7 @@ source={{ uri: previewUri(value.trim())! }}
             />
 
             <Text style={styles.helperInline}>
-              Add the detail Mapbox could not find. This is shown only to booked learners.
+              This is shown only to booked learners arriving at the location.
             </Text>
 
             <Text style={[styles.label, styles.labelTopGap]}>

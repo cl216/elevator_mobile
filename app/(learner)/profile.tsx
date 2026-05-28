@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
+import * as Linking from "expo-linking";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -12,9 +13,8 @@ import {
   Text,
   View,
 } from "react-native";
-import { markApiLogoutFinished } from "@/src/api/client";
 import { deleteAccount } from "@/src/api/auth";
-import { api } from "@/src/api/client";
+import { api, markApiLogoutFinished } from "@/src/api/client";
 import { uploadImage } from "@/src/api/uploads";
 import AppLayout from "@/src/components/layout/AppLayout";
 import { AppScreen } from "@/src/components/ui/AppScreen";
@@ -43,6 +43,8 @@ const COLORS = {
   warningBorder: "rgba(255, 193, 7, 0.28)",
   warningText: "#FFD666",
 };
+
+const SUPPORT_EMAIL = "support@elevatorapp.org";
 
 const handleDeleteAccount = () => {
   Alert.alert(
@@ -143,11 +145,11 @@ function ProfileCard({
 }
 
 export default function ProfileScreen() {
-const params = useLocalSearchParams<{
-  returnToSessionId?: string;
-  needsPhotoForBooking?: string;
-  introMessage?: string;
-}>();
+  const params = useLocalSearchParams<{
+    returnToSessionId?: string;
+    needsPhotoForBooking?: string;
+    introMessage?: string;
+  }>();
 
   const hasTeacherProfile = authStore((s) => s.hasTeacherProfile);
   const logout = authStore((s) => s.logout);
@@ -162,14 +164,42 @@ const params = useLocalSearchParams<{
     ? String(params.returnToSessionId)
     : "";
 
-const handleLogout = async () => {
-  try {
-    await logout();
-  } finally {
-    markApiLogoutFinished();
-    safeReplace("/(auth)/login");
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } finally {
+      markApiLogoutFinished();
+      safeReplace("/(auth)/login");
+    }
+  };
+
+  async function handleContactSupport() {
+    const subject = encodeURIComponent("Elevator Support");
+    const body = encodeURIComponent(
+      "Hi Elevator support,\n\nI need help with:\n\n",
+    );
+
+    const url = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
+
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+
+      if (!canOpen) {
+        Alert.alert(
+          "Email unavailable",
+          `Please email us at ${SUPPORT_EMAIL}`,
+        );
+        return;
+      }
+
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert(
+        "Email unavailable",
+        `Please email us at ${SUPPORT_EMAIL}`,
+      );
+    }
   }
-};
 
   async function handleChooseProfilePhoto() {
     try {
@@ -185,7 +215,7 @@ const handleLogout = async () => {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
+        allowsEditing: false,
         aspect: [1, 1],
         quality: 0.6,
       });
@@ -225,7 +255,7 @@ const handleLogout = async () => {
                   pathname: "/(modal)/booking/[sessionId]",
                   params: {
                     sessionId: returnToSessionId,
-                        introMessage: String(params.introMessage ?? ""),
+                    introMessage: String(params.introMessage ?? ""),
                   },
                 }),
             },
@@ -350,25 +380,25 @@ const handleLogout = async () => {
             </View>
           </View>
 
-{isAdmin ? (
-  <>
-    <ProfileCard
-      icon="shield-checkmark-outline"
-      title="Admin dashboard"
-      body="Manage users, pending sessions, categories, bookings, and moderation."
-      cta="Open admin dashboard"
-      onPress={() => router.push("/(admin)/dashboard")}
-    />
+          {isAdmin ? (
+            <>
+              <ProfileCard
+                icon="shield-checkmark-outline"
+                title="Admin dashboard"
+                body="Manage users, pending sessions, categories, bookings, and moderation."
+                cta="Open admin dashboard"
+                onPress={() => router.push("/(admin)/dashboard")}
+              />
 
-    <ProfileCard
-      icon="checkmark-done-outline"
-      title="Session review"
-      body="Approve or reject pending sessions before they appear to learners."
-      cta="Open session review"
-      onPress={() => router.push("/(admin)/session-review")}
-    />
-  </>
-) : null}
+              <ProfileCard
+                icon="checkmark-done-outline"
+                title="Session review"
+                body="Approve or reject pending sessions before they appear to learners."
+                cta="Open session review"
+                onPress={() => router.push("/(admin)/session-review")}
+              />
+            </>
+          ) : null}
 
           <ProfileCard
             icon={hasTeacherProfile ? "school-outline" : "add-circle-outline"}
@@ -405,6 +435,14 @@ const handleLogout = async () => {
             body="Track your private 1:1 requests, review statuses, and see any teacher notes."
             cta="View requests"
             onPress={() => safePush("/(learner)/private-session-requests")}
+          />
+
+          <ProfileCard
+            icon="help-circle-outline"
+            title="Help & support"
+            body="Need help with bookings, refunds, disputes, payments, or reporting a bug? Contact Elevator support."
+            cta="Contact support"
+            onPress={handleContactSupport}
           />
 
           <ProfileCard

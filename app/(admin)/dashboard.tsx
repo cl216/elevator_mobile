@@ -236,6 +236,16 @@ export default function AdminDashboardScreen() {
                 Reason: {booking.dispute_reason || "General dispute"}
               </Text>
 
+{booking.dispute_comment ? (
+  <View style={styles.detailBox}>
+    <Text style={styles.detailLabel}>User comment</Text>
+
+    <Text style={styles.detailBody}>
+      {booking.dispute_comment}
+    </Text>
+  </View>
+) : null}
+
               <View style={styles.financialBox}>
                 <Text style={styles.financialText}>
                   Lesson: €{((booking.lesson_amount || 0) / 100).toFixed(2)}

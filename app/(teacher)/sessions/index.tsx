@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { router } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -83,13 +83,27 @@ type TeacherSession = {
   title: string;
   category: string;
   bookings_count: string | number;
-status?: "ACTIVE" | "CANCELLED" | string;
-review_status?: "PENDING_REVIEW" | "ACTIVE" | "REJECTED" | string;
-cancelled_at?: string | null;
+  status?: "ACTIVE" | "CANCELLED" | string;
+  review_status?: "PENDING_REVIEW" | "ACTIVE" | "REJECTED" | string;
+  cancelled_at?: string | null;
 };
 
 function isPastSession(startTime: string) {
   return new Date(startTime).getTime() < Date.now();
+}
+
+function needsAttendanceConfirmation(session: TeacherSession) {
+  const start = new Date(session.start_time).getTime();
+  const now = Date.now();
+
+  if (Number.isNaN(start)) return false;
+
+  return (
+    session.status === "ACTIVE" &&
+    Number(session.bookings_count ?? 0) > 0 &&
+    now >= start + 15 * 60 * 1000 &&
+    now <= start + 24 * 60 * 60 * 1000
+  );
 }
 
 function formatSessionDate(startTime: string) {
@@ -299,10 +313,11 @@ export default function TeacherSessionsScreen() {
 
       await loadSessions();
 
-Alert.alert(
-  "Submitted for review",
-  "Your repeated session was submitted for approval before going live.",
-);    } catch (e: any) {
+      Alert.alert(
+        "Submitted for review",
+        "Your repeated session was submitted for approval before going live.",
+      );
+    } catch (e: any) {
       const message =
         e?.response?.data?.message ??
         e?.message ??
@@ -402,20 +417,23 @@ Alert.alert(
       Number(session.max_participants) - bookingsCount,
     );
     const isBusy = busySessionId === session.id;
+    const attendanceNeeded = needsAttendanceConfirmation(session);
 
     return (
       <SessionsCard
         key={session.id}
         icon={
-          section === "upcoming"
-            ? "calendar-outline"
-            : section === "past"
-              ? "time-outline"
-              : "close-circle-outline"
+          attendanceNeeded
+            ? "alert-circle-outline"
+            : section === "upcoming"
+              ? "calendar-outline"
+              : section === "past"
+                ? "time-outline"
+                : "close-circle-outline"
         }
         title={session.title}
         subtitle={`${session.category} · €${session.price}`}
-        highlight={!isBusy && section === "upcoming"}
+        highlight={!isBusy && (section === "upcoming" || attendanceNeeded)}
       >
         <Text style={styles.sessionMetaPrimary}>
           {formatSessionDate(session.start_time)}
@@ -437,13 +455,42 @@ Alert.alert(
             ? ` · ${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
             : ""}
         </Text>
+
         {session.review_status === "PENDING_REVIEW" ? (
-  <View style={styles.pendingReviewPill}>
-    <Text style={styles.pendingReviewPillText}>
-      Pending review
-    </Text>
-  </View>
-) : null}
+          <View style={styles.pendingReviewPill}>
+            <Text style={styles.pendingReviewPillText}>Pending review</Text>
+          </View>
+        ) : null}
+
+        {attendanceNeeded ? (
+          <View style={styles.attendanceBox}>
+            <View style={styles.attendanceHeaderRow}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={18}
+                color={COLORS.warningText}
+              />
+
+              <Text style={styles.attendanceTitle}>
+                Attendance check needed
+              </Text>
+            </View>
+
+            <Text style={styles.attendanceBody}>
+              This session has started. Open it to confirm attendance or report
+              a learner no-show within 24 hours.
+            </Text>
+
+            <Pressable
+              onPress={() => safePush(`/(teacher)/sessions/${session.id}`)}
+              style={styles.attendanceButton}
+            >
+              <Text style={styles.attendanceButtonText}>
+                Review attendance
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {section === "cancelled" ? (
           <View style={[styles.statusPill, styles.statusPillDanger]}>
@@ -455,22 +502,32 @@ Alert.alert(
 
         <View style={styles.cardFooter}>
           <Text style={styles.dateText}>
-            {section === "cancelled"
-              ? "This session is no longer bookable."
-              : section === "past"
-                ? "Use repeat to create a new copy quickly."
-                : "Manage this live session and view learner bookings."}
+            {attendanceNeeded
+              ? "Action may be needed for learner attendance."
+              : section === "cancelled"
+                ? "This session is no longer bookable."
+                : section === "past"
+                  ? "Use repeat to create a new copy quickly."
+                  : "Manage this live session and view learner bookings."}
           </Text>
 
           <View style={styles.cardFooterActions}>
             <Pressable
               onPress={() => safePush(`/(teacher)/sessions/${session.id}`)}
               style={({ pressed }) => [
-                styles.secondaryPill,
+                attendanceNeeded ? styles.attendancePill : styles.secondaryPill,
                 pressed && styles.secondaryPillPressed,
               ]}
             >
-              <Text style={styles.secondaryPillText}>Open</Text>
+              <Text
+                style={
+                  attendanceNeeded
+                    ? styles.attendancePillText
+                    : styles.secondaryPillText
+                }
+              >
+                {attendanceNeeded ? "Review attendance" : "Open"}
+              </Text>
             </Pressable>
 
             {section === "upcoming" ? (
@@ -531,9 +588,6 @@ Alert.alert(
     );
   }
 
-
-
-
   const emptyState = useMemo(
     () => (
       <SessionsCard
@@ -550,7 +604,6 @@ Alert.alert(
         >
           <Text style={styles.primaryButtonText}>Create session</Text>
         </Pressable>
-        
       </SessionsCard>
     ),
     [],
@@ -788,7 +841,6 @@ Alert.alert(
                     : cancelledSessions.map((session) =>
                         renderSessionCard(session, "cancelled"),
                       )}
-
                 </View>
               </>
             )}
@@ -798,7 +850,6 @@ Alert.alert(
     </AppLayout>
   );
 }
-
 
 const styles = StyleSheet.create({
   screen: {
@@ -1005,21 +1056,66 @@ const styles = StyleSheet.create({
   },
 
   pendingReviewPill: {
-  alignSelf: "flex-start",
-  marginTop: 12,
-  borderWidth: 1,
-  borderColor: COLORS.warningBorder,
-  backgroundColor: COLORS.warningBg,
-  paddingHorizontal: 10,
-  paddingVertical: 6,
-  borderRadius: 999,
-},
+    alignSelf: "flex-start",
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBg,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
 
-pendingReviewPillText: {
-  color: COLORS.warningText,
-  fontSize: 12,
-  fontWeight: "900",
-},
+  pendingReviewPillText: {
+    color: COLORS.warningText,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  attendanceBox: {
+    marginTop: 12,
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: COLORS.warningBg,
+    borderWidth: 1,
+    borderColor: COLORS.warningBorder,
+  },
+
+  attendanceHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+
+  attendanceTitle: {
+    color: COLORS.warningText,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  attendanceBody: {
+    color: COLORS.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  attendanceButton: {
+    alignSelf: "flex-start",
+    marginTop: 10,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: COLORS.accentSoft,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+  },
+
+  attendanceButtonText: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "900",
+  },
 
   cardFooter: {
     marginTop: 14,
@@ -1064,6 +1160,20 @@ pendingReviewPillText: {
     fontWeight: "900",
   },
 
+  attendancePill: {
+    borderWidth: 1,
+    borderColor: COLORS.warningBorder,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: COLORS.warningBg,
+  },
+
+  attendancePillText: {
+    color: COLORS.warningText,
+    fontWeight: "900",
+  },
+
   dangerPill: {
     borderColor: COLORS.dangerBorder,
     backgroundColor: COLORS.dangerBg,
@@ -1105,7 +1215,6 @@ pendingReviewPillText: {
     fontWeight: "900",
   },
 
-  
   repeatPickerStack: {
     gap: 10,
   },

@@ -15,15 +15,19 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SessionBottomSheet } from "../../src/components/session/sessionBottomSheet";
-
+import {
+  reportTeacherNoShow,
+} from "@/src/api/bookings";
 import {
   getMyLearnerPrivateSessionRequests,
   type PrivateSessionRequest,
@@ -330,6 +334,13 @@ export default function LearnerBookingsScreen() {
   const [checkingBookingId, setCheckingBookingId] = useState<string | null>(
     null,
   );
+  const [teacherNoShowModalVisible, setTeacherNoShowModalVisible] =
+  useState(false);
+
+const [teacherNoShowBooking, setTeacherNoShowBooking] =
+  useState<BookingRow | null>(null);
+
+const [teacherNoShowComment, setTeacherNoShowComment] = useState("");
 
   async function loadBookings(isRefresh = false) {
     try {
@@ -499,48 +510,79 @@ export default function LearnerBookingsScreen() {
     });
   }, []);
 
-  const handleCancelBooking = useCallback((booking: BookingRow) => {
-    const previewMessage = getLearnerCancelRefundPreview(booking);
+function openTeacherNoShowModal(booking: BookingRow) {
+  setTeacherNoShowBooking(booking);
+  setTeacherNoShowComment("");
+  setTeacherNoShowModalVisible(true);
+}
 
-    Alert.alert("Cancel booking?", previewMessage, [
-      {
-        text: "Keep booking",
-        style: "cancel",
+async function submitTeacherNoShow() {
+  if (!teacherNoShowBooking) return;
+
+  try {
+    await reportTeacherNoShow(
+      teacherNoShowBooking.booking_id,
+      teacherNoShowComment.trim().slice(0, 200),
+    );
+
+    setTeacherNoShowModalVisible(false);
+    setTeacherNoShowBooking(null);
+    setTeacherNoShowComment("");
+
+    Alert.alert(
+      "Report submitted",
+      "Your report has been sent to admin for review.",
+    );
+
+    await loadBookings(true);
+  } catch (e: any) {
+    const rawMessage = getApiErrorMessage(e, "Could not submit report.");
+    Alert.alert("Could not report no-show", String(rawMessage));
+  }
+}
+
+const handleCancelBooking = useCallback((booking: BookingRow) => {
+  const previewMessage = getLearnerCancelRefundPreview(booking);
+
+  Alert.alert("Cancel booking?", previewMessage, [
+    {
+      text: "Keep booking",
+      style: "cancel",
+    },
+    {
+      text: "Cancel booking",
+      style: "destructive",
+      onPress: async () => {
+        try {
+          setCancellingBookingId(booking.booking_id);
+
+          await api.post(`/bookings/${booking.booking_id}/cancel/learner`);
+
+          const hoursUntilSession = getHoursUntil(booking.session_start_time);
+          const successMessage =
+            booking.booking_status === "PENDING"
+              ? "Your pending booking has been cancelled."
+              : hoursUntilSession !== null && hoursUntilSession >= 12
+                ? "Your booking has been cancelled. Your refund will be processed automatically."
+                : "Your booking has been cancelled.";
+
+          Alert.alert("Booking cancelled", successMessage);
+          await loadBookings(true);
+        } catch (e: any) {
+          const rawMessage = getApiErrorMessage(
+            e,
+            "Could not cancel booking.",
+          );
+          const message = normalizeBookingErrorMessage(String(rawMessage));
+
+          Alert.alert("Could not cancel booking", message);
+        } finally {
+          setCancellingBookingId(null);
+        }
       },
-      {
-        text: "Cancel booking",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setCancellingBookingId(booking.booking_id);
-
-            await api.post(`/bookings/${booking.booking_id}/cancel/learner`);
-
-            const hoursUntilSession = getHoursUntil(booking.session_start_time);
-            const successMessage =
-              booking.booking_status === "PENDING"
-                ? "Your pending booking has been cancelled."
-                : hoursUntilSession !== null && hoursUntilSession >= 12
-                  ? "Your booking has been cancelled. Your refund will be processed automatically."
-                  : "Your booking has been cancelled.";
-
-            Alert.alert("Booking cancelled", successMessage);
-            await loadBookings(true);
-          } catch (e: any) {
-            const rawMessage = getApiErrorMessage(
-              e,
-              "Could not cancel booking.",
-            );
-            const message = normalizeBookingErrorMessage(String(rawMessage));
-
-            Alert.alert("Could not cancel booking", message);
-          } finally {
-            setCancellingBookingId(null);
-          }
-        },
-      },
-    ]);
-  }, []);
+    },
+  ]);
+}, []);
 
   const activePrivateRequests = useMemo(() => {
     return privateRequests.filter((request: any) =>
@@ -712,6 +754,10 @@ export default function LearnerBookingsScreen() {
 
     const showCancelButton = canLearnerCancel(booking);
     const showReviewButton = canLeaveReview(booking);
+    const showTeacherNoShowButton =
+  booking.booking_status === "CONFIRMED" &&
+  !!booking.session_start_time &&
+  isPast(booking.session_start_time);
     const isCancelling = cancellingBookingId === booking.booking_id;
     const isPaying = payingBookingId === booking.booking_id;
     const isChecking = checkingBookingId === booking.booking_id;
@@ -735,17 +781,6 @@ export default function LearnerBookingsScreen() {
       booking.booking_status === "CONFIRMED" &&
       Number.isFinite(Number(booking.session_lat)) &&
       Number.isFinite(Number(booking.session_lng));
-
-      console.log(
-  "DIRECTIONS CHECK",
-  {
-    bookingId: booking.booking_id,
-    status: booking.booking_status,
-    lat: booking.session_lat,
-    lng: booking.session_lng,
-    hasDirections,
-  }
-);
 
     return (
       <Pressable
@@ -810,6 +845,52 @@ export default function LearnerBookingsScreen() {
               <Text style={styles.infoBoxText}>{statusDescription}</Text>
             </View>
           ) : null}
+{showTeacherNoShowButton ? (
+  <View style={styles.postSessionCard}>
+    <View style={styles.postSessionHeader}>
+      <Ionicons
+        name="time-outline"
+        size={18}
+        color={COLORS.warningText}
+      />
+
+      <Text style={styles.postSessionTitle}>
+        How did your session go?
+      </Text>
+    </View>
+
+    <Text style={styles.postSessionBody}>
+      If your teacher never arrived or the session did not happen,
+      you can report a no-show within 24 hours of the session start time.
+    </Text>
+
+    <View style={styles.postSessionActions}>
+      <Pressable
+        onPress={(e) => {
+          e.stopPropagation();
+          safePush(`/(learner)/review/${booking.booking_id}`);
+        }}
+        style={styles.postSessionSuccessButton}
+      >
+        <Text style={styles.postSessionSuccessText}>
+          Session went fine
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={(e) => {
+          e.stopPropagation();
+          openTeacherNoShowModal(booking);
+        }}
+        style={styles.postSessionDangerButton}
+      >
+        <Text style={styles.postSessionDangerText}>
+          Report no-show
+        </Text>
+      </Pressable>
+    </View>
+  </View>
+) : null}
 
           {hasMeetingDetails ? (
             <View style={styles.meetingBox}>
@@ -868,10 +949,11 @@ export default function LearnerBookingsScreen() {
             </View>
           ) : null}
 
-          {showPaymentButton ||
-          showCheckStatusButton ||
-          showCancelButton ||
-          showReviewButton ? (
+{showPaymentButton ||
+showCheckStatusButton ||
+showCancelButton ||
+showReviewButton ||
+showTeacherNoShowButton ? (
             <View style={styles.cardActions}>
               {showPaymentButton ? (
                 <Pressable
@@ -936,6 +1018,19 @@ export default function LearnerBookingsScreen() {
                   <Text style={styles.secondaryButtonText}>Leave review</Text>
                 </Pressable>
               ) : null}
+
+{showTeacherNoShowButton ? (
+  <Pressable
+    onPress={(e) => {
+      e.stopPropagation();
+openTeacherNoShowModal(booking);    }}
+    style={styles.secondaryButton}
+  >
+    <Text style={styles.secondaryButtonText}>
+      Report teacher no-show
+    </Text>
+  </Pressable>
+) : null}
 
               {showCancelButton ? (
                 <Pressable
@@ -1122,6 +1217,70 @@ export default function LearnerBookingsScreen() {
             setSheetSessionId(null);
           }}
         />
+        <Modal
+  visible={teacherNoShowModalVisible}
+  transparent
+  animationType="fade"
+  onRequestClose={() => setTeacherNoShowModalVisible(false)}
+>
+  <View style={styles.modalBackdrop}>
+    <View style={styles.modalCard}>
+      <Text style={styles.modalTitle}>
+        Report teacher no-show
+      </Text>
+
+      <Text style={styles.modalBody}>
+        Briefly explain what happened. Admin will review this
+        before any refund is approved.
+
+        {"\n\n"}
+
+        No-show reports must be submitted within 24 hours
+        of the session start time.
+      </Text>
+
+      <TextInput
+        value={teacherNoShowComment}
+        onChangeText={(text) =>
+          setTeacherNoShowComment(text.slice(0, 200))
+        }
+        placeholder="Example: I waited 20 minutes and the teacher never arrived."
+        placeholderTextColor={COLORS.textMuted}
+        multiline
+        maxLength={200}
+        style={styles.modalInput}
+      />
+
+      <Text style={styles.characterCount}>
+        {teacherNoShowComment.length}/200
+      </Text>
+
+      <View style={styles.modalActions}>
+        <Pressable
+          onPress={() => {
+            setTeacherNoShowModalVisible(false);
+            setTeacherNoShowBooking(null);
+            setTeacherNoShowComment("");
+          }}
+          style={styles.modalCancelButton}
+        >
+          <Text style={styles.modalCancelText}>
+            Cancel
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={submitTeacherNoShow}
+          style={styles.modalSubmitButton}
+        >
+          <Text style={styles.modalSubmitText}>
+            Submit report
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  </View>
+</Modal>
       </AppScreen>
     </AppLayout>
   );
@@ -1562,4 +1721,150 @@ const styles = StyleSheet.create({
     color: COLORS.textSoft,
     lineHeight: 20,
   },
+
+  modalBackdrop: {
+  flex: 1,
+  backgroundColor: "rgba(0,0,0,0.72)",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 20,
+},
+
+modalCard: {
+  width: "100%",
+  maxWidth: 420,
+  borderRadius: 22,
+  padding: 18,
+  backgroundColor: COLORS.surface,
+  borderWidth: 1,
+  borderColor: COLORS.borderStrong,
+},
+
+modalTitle: {
+  color: COLORS.text,
+  fontSize: 20,
+  fontWeight: "900",
+  marginBottom: 8,
+},
+
+modalBody: {
+  color: COLORS.textSoft,
+  fontSize: 14,
+  lineHeight: 20,
+  marginBottom: 12,
+},
+
+modalInput: {
+  minHeight: 96,
+  borderRadius: 14,
+  borderWidth: 1,
+  borderColor: COLORS.borderStrong,
+  backgroundColor: COLORS.surfaceSoft,
+  color: COLORS.text,
+  padding: 12,
+  textAlignVertical: "top",
+},
+
+characterCount: {
+  color: COLORS.textMuted,
+  fontSize: 12,
+  textAlign: "right",
+  marginTop: 6,
+},
+
+modalActions: {
+  flexDirection: "row",
+  justifyContent: "flex-end",
+  gap: 10,
+  marginTop: 14,
+},
+
+modalCancelButton: {
+  paddingVertical: 10,
+  paddingHorizontal: 14,
+  borderRadius: 14,
+  borderWidth: 1,
+  borderColor: COLORS.border,
+  backgroundColor: COLORS.surfaceSoft,
+},
+
+modalCancelText: {
+  color: COLORS.text,
+  fontWeight: "800",
+},
+
+modalSubmitButton: {
+  paddingVertical: 10,
+  paddingHorizontal: 14,
+  borderRadius: 14,
+  borderWidth: 1,
+  borderColor: COLORS.warningBorder,
+  backgroundColor: COLORS.warningBg,
+},
+
+modalSubmitText: {
+  color: COLORS.warningText,
+  fontWeight: "900",
+},
+postSessionCard: {
+  marginTop: 14,
+  borderRadius: 18,
+  padding: 14,
+  backgroundColor: COLORS.warningBg,
+  borderWidth: 1,
+  borderColor: COLORS.warningBorder,
+},
+
+postSessionHeader: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 8,
+  marginBottom: 8,
+},
+
+postSessionTitle: {
+  color: COLORS.warningText,
+  fontSize: 15,
+  fontWeight: "900",
+},
+
+postSessionBody: {
+  color: COLORS.textSoft,
+  lineHeight: 20,
+},
+
+postSessionActions: {
+  flexDirection: "row",
+  gap: 10,
+  marginTop: 14,
+  flexWrap: "wrap",
+},
+
+postSessionSuccessButton: {
+  paddingVertical: 10,
+  paddingHorizontal: 14,
+  borderRadius: 12,
+  borderWidth: 1,
+  borderColor: COLORS.successBorder,
+  backgroundColor: COLORS.successBg,
+},
+
+postSessionSuccessText: {
+  color: COLORS.successText,
+  fontWeight: "900",
+},
+
+postSessionDangerButton: {
+  paddingVertical: 10,
+  paddingHorizontal: 14,
+  borderRadius: 12,
+  borderWidth: 1,
+  borderColor: COLORS.dangerBorder,
+  backgroundColor: COLORS.dangerBg,
+},
+
+postSessionDangerText: {
+  color: COLORS.dangerText,
+  fontWeight: "900",
+},
 });
