@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "436675782197",
+    "project_id": "elevator-85061",
+    "storage_bucket": "elevator-85061.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:436675782197:android:49bc2acb12d012970a737c",
+        "android_client_info": {
+          "package_name": "com.clawlor.elevator"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBSbr_tqdLR_KYfjs6x0__X9jBDvSMPB3A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

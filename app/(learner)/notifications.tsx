@@ -244,7 +244,8 @@ export default function NotificationsScreen() {
       type === "booking_confirmed_teacher" ||
       type === "booking_cancelled_by_learner" ||
       type === "teacher_session_reminder_24h" ||
-      type === "teacher_session_reminder_1h"
+      type === "teacher_session_reminder_1h" ||
+        type === "teacher_attendance_check"
     ) {
       if (sessionId) {
         safeReplace(`/(teacher)/sessions/${sessionId}`);

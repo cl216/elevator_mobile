@@ -74,6 +74,7 @@ type SessionBookingRow = {
     | "PENDING"
     | "CONFIRMED"
     | "CANCELLED_BY_LEARNER"
+    | "LATE_CANCELLED_BY_LEARNER"
     | "CANCELLED_BY_TEACHER"
     | "REFUND_PENDING"
     | "REFUNDED"
@@ -111,6 +112,8 @@ function statusLabel(status?: string) {
       return "Pending payment";
     case "CANCELLED_BY_LEARNER":
       return "Cancelled by learner";
+      case "LATE_CANCELLED_BY_LEARNER":
+  return "Late cancelled by learner";
     case "CANCELLED_BY_TEACHER":
       return "Cancelled by teacher";
     case "REFUND_PENDING":
@@ -148,6 +151,7 @@ function getStatusStyles(status?: string) {
       };
     case "CANCELLED_BY_LEARNER":
     case "CANCELLED_BY_TEACHER":
+      case "LATE_CANCELLED_BY_LEARNER":
     case "LEARNER_NO_SHOW":
     case "TEACHER_NO_SHOW":
       return {
@@ -179,6 +183,8 @@ function getTeacherBookingStatusDescription(status?: string) {
       return "This learner has started checkout but has not completed payment yet.";
     case "CANCELLED_BY_LEARNER":
       return "The learner cancelled this booking.";
+      case "LATE_CANCELLED_BY_LEARNER":
+  return "The learner cancelled less than 12 hours before the session. This remains eligible for teacher payout.";
     case "CANCELLED_BY_TEACHER":
       return "You cancelled this booking.";
     case "REFUND_PENDING":

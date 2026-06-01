@@ -175,6 +175,8 @@ function statusLabel(status: string) {
       return "Pending payment";
     case "CANCELLED_BY_LEARNER":
       return "Cancelled by you";
+      case "LATE_CANCELLED_BY_LEARNER":
+  return "Late cancelled by you";
     case "CANCELLED_BY_TEACHER":
       return "Cancelled by teacher";
     case "REFUND_PENDING":
@@ -207,6 +209,7 @@ function getStatusStyles(status: string) {
       };
     case "CANCELLED_BY_LEARNER":
     case "CANCELLED_BY_TEACHER":
+      case "LATE_CANCELLED_BY_LEARNER":
       return {
         backgroundColor: COLORS.dangerBg,
         borderColor: COLORS.dangerBorder,
@@ -257,6 +260,8 @@ function getStatusDescription(booking: BookingRow) {
       return "Your place is confirmed.";
     case "CANCELLED_BY_LEARNER":
       return "You cancelled this booking.";
+      case "LATE_CANCELLED_BY_LEARNER":
+  return "You cancelled this booking less than 12 hours before the session. This is not eligible for an automatic refund.";
     case "CANCELLED_BY_TEACHER":
       return "The teacher cancelled this booking. Any eligible refund will be processed automatically.";
     case "REFUND_PENDING":
@@ -598,6 +603,7 @@ const handleCancelBooking = useCallback((booking: BookingRow) => {
           !isPast(b.session_start_time) &&
           !isPendingBookingExpired(b) &&
           b.booking_status !== "CANCELLED_BY_LEARNER" &&
+          b.booking_status !== "LATE_CANCELLED_BY_LEARNER" &&
           b.booking_status !== "CANCELLED_BY_TEACHER" &&
           b.booking_status !== "REFUNDED" &&
           b.booking_status !== "REFUND_PENDING" &&
@@ -620,6 +626,7 @@ const handleCancelBooking = useCallback((booking: BookingRow) => {
           isPendingBookingExpired(b) ||
           b.booking_status === "CANCELLED_BY_LEARNER" ||
           b.booking_status === "CANCELLED_BY_TEACHER" ||
+          b.booking_status === "LATE_CANCELLED_BY_LEARNER" ||
           b.booking_status === "REFUND_PENDING" ||
           b.booking_status === "REFUNDED" ||
           b.booking_status === "REFUND_FAILED" ||
