@@ -1404,6 +1404,13 @@ const handleDismissMapExplainCard = useCallback(() => {
     heading: 0,
   }}
 />
+
+<Mapbox.UserLocation
+  visible={true}
+  showsUserHeadingIndicator={true}
+/>
+
+<Mapbox.UserLocation visible={true} />
           
 
           {showClusterSource ? (

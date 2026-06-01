@@ -422,14 +422,6 @@ export default function ProfileScreen() {
           />
 
           <ProfileCard
-            icon="card-outline"
-            title="Payment methods"
-            body="View saved cards for quicker checkout and manage how you pay."
-            cta="View saved cards"
-            onPress={() => safePush("/(learner)/payment-methods")}
-          />
-
-          <ProfileCard
             icon="paper-plane-outline"
             title="Private session requests"
             body="Track your private 1:1 requests, review statuses, and see any teacher notes."

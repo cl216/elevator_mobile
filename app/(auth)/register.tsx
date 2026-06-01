@@ -12,15 +12,42 @@ export default function RegisterScreen() {
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
   const [loading, setLoading] = useState(false);
 
   async function onRegister() {
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!firstName.trim()) {
+      Alert.alert("Missing first name", "Please enter your first name.");
+      return;
+    }
+
+    if (!cleanEmail) {
+      Alert.alert("Missing email", "Please enter your email address.");
+      return;
+    }
+
+    if (!password) {
+      Alert.alert("Missing password", "Please enter a password.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert(
+        "Passwords do not match",
+        "Please enter the same password twice.",
+      );
+      return;
+    }
+
     try {
       setLoading(true);
 
       const res = await api.post("/auth/register", {
         first_name: firstName.trim(),
-        email: email.trim().toLowerCase(),
+        email: cleanEmail,
         password,
       });
 
@@ -83,6 +110,9 @@ export default function RegisterScreen() {
       <TextInput
         value={firstName}
         onChangeText={setFirstName}
+        autoCapitalize="words"
+        autoComplete="given-name"
+        textContentType="givenName"
         placeholder="First name"
         placeholderTextColor={COLORS.textMuted}
         style={styles.input}
@@ -91,8 +121,12 @@ export default function RegisterScreen() {
       <TextInput
         value={email}
         onChangeText={setEmail}
-        autoCapitalize="sentences"
+        autoCapitalize="none"
+        autoCorrect={false}
         keyboardType="email-address"
+        autoComplete="email"
+        textContentType="emailAddress"
+        importantForAutofill="yes"
         placeholder="Email"
         placeholderTextColor={COLORS.textMuted}
         style={styles.input}
@@ -102,7 +136,26 @@ export default function RegisterScreen() {
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="new-password"
+        textContentType="newPassword"
+        importantForAutofill="yes"
         placeholder="Password"
+        placeholderTextColor={COLORS.textMuted}
+        style={styles.input}
+      />
+
+      <TextInput
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+        secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="new-password"
+        textContentType="newPassword"
+        importantForAutofill="yes"
+        placeholder="Confirm password"
         placeholderTextColor={COLORS.textMuted}
         style={styles.input}
       />

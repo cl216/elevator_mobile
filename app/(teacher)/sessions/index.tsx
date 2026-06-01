@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { router } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -285,7 +285,14 @@ export default function TeacherSessionsScreen() {
 
     setRepeatTargetSession(session);
     setRepeatDateTime(next);
-    setShowRepeatDatePicker(true);
+    setShowRepeatDatePicker(false);
+    setShowRepeatTimePicker(false);
+  }
+
+  function closeRepeatModal() {
+    setRepeatTargetSession(null);
+    setShowRepeatDatePicker(false);
+    setShowRepeatTimePicker(false);
   }
 
   async function handleConfirmRepeat() {
@@ -307,9 +314,7 @@ export default function TeacherSessionsScreen() {
         repeatDateTime.toISOString(),
       );
 
-      setRepeatTargetSession(null);
-      setShowRepeatDatePicker(false);
-      setShowRepeatTimePicker(false);
+      closeRepeatModal();
 
       await loadSessions();
 
@@ -651,122 +656,6 @@ export default function TeacherSessionsScreen() {
               </View>
             </View>
 
-            {repeatTargetSession ? (
-              <SessionsCard
-                icon="copy-outline"
-                title="Repeat session"
-                subtitle={`Choose a new date and time for "${repeatTargetSession.title}".`}
-                highlight
-              >
-                <View style={styles.repeatPickerStack}>
-                  <Pressable
-                    onPress={() => setShowRepeatDatePicker(true)}
-                    style={({ pressed }) => [
-                      styles.repeatPickerCard,
-                      pressed && styles.secondaryPillPressed,
-                    ]}
-                  >
-                    <Text style={styles.repeatPickerLabel}>Date</Text>
-                    <Text style={styles.repeatPickerValue}>
-                      {formattedRepeatDate}
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => setShowRepeatTimePicker(true)}
-                    style={({ pressed }) => [
-                      styles.repeatPickerCard,
-                      pressed && styles.secondaryPillPressed,
-                    ]}
-                  >
-                    <Text style={styles.repeatPickerLabel}>Time</Text>
-                    <Text style={styles.repeatPickerValue}>
-                      {formattedRepeatTime}
-                    </Text>
-                  </Pressable>
-                </View>
-
-                {showRepeatDatePicker ? (
-                  <DateTimePicker
-                    value={repeatDateTime}
-                    mode="date"
-                    minimumDate={new Date()}
-                    display={Platform.OS === "ios" ? "spinner" : "default"}
-                    onChange={(_, selected) => {
-                      setShowRepeatDatePicker(Platform.OS === "ios");
-                      if (!selected) return;
-
-                      const next = new Date(repeatDateTime);
-                      next.setFullYear(
-                        selected.getFullYear(),
-                        selected.getMonth(),
-                        selected.getDate(),
-                      );
-                      setRepeatDateTime(next);
-                    }}
-                  />
-                ) : null}
-
-                {showRepeatTimePicker ? (
-                  <DateTimePicker
-                    value={repeatDateTime}
-                    mode="time"
-                    display={Platform.OS === "ios" ? "spinner" : "default"}
-                    onChange={(_, selected) => {
-                      setShowRepeatTimePicker(Platform.OS === "ios");
-                      if (!selected) return;
-
-                      const next = new Date(repeatDateTime);
-                      next.setHours(
-                        selected.getHours(),
-                        selected.getMinutes(),
-                        0,
-                        0,
-                      );
-                      setRepeatDateTime(next);
-                    }}
-                  />
-                ) : null}
-
-                <View style={styles.cardFooter}>
-                  <Text style={styles.dateText}>
-                    Create a future copy of this session.
-                  </Text>
-
-                  <View style={styles.cardFooterActions}>
-                    <Pressable
-                      onPress={handleConfirmRepeat}
-                      disabled={busySessionId === repeatTargetSession.id}
-                      style={({ pressed }) => [
-                        styles.secondaryPill,
-                        pressed && styles.secondaryPillPressed,
-                      ]}
-                    >
-                      <Text style={styles.secondaryPillText}>
-                        {busySessionId === repeatTargetSession.id
-                          ? "Creating..."
-                          : "Create"}
-                      </Text>
-                    </Pressable>
-
-                    <Pressable
-                      onPress={() => {
-                        setRepeatTargetSession(null);
-                        setShowRepeatDatePicker(false);
-                        setShowRepeatTimePicker(false);
-                      }}
-                      style={({ pressed }) => [
-                        styles.secondaryPill,
-                        pressed && styles.secondaryPillPressed,
-                      ]}
-                    >
-                      <Text style={styles.secondaryPillText}>Cancel</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </SessionsCard>
-            ) : null}
-
             {loading ? (
               <SessionsCard
                 icon="calendar-outline"
@@ -846,6 +735,151 @@ export default function TeacherSessionsScreen() {
             )}
           </ScrollView>
         </View>
+
+        <Modal
+          transparent
+          visible={!!repeatTargetSession}
+          animationType="fade"
+          onRequestClose={closeRepeatModal}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeaderRow}>
+                <View style={styles.iconCircle}>
+                  <Ionicons name="copy-outline" size={18} color="#FFFFFF" />
+                </View>
+
+                <View style={styles.modalHeaderText}>
+                  <Text style={styles.modalTitle}>Repeat session</Text>
+                  <Text style={styles.modalSubtitle}>
+                    Choose a new date and time for this copied session.
+                  </Text>
+                </View>
+              </View>
+
+              {repeatTargetSession ? (
+                <View style={styles.modalSummaryBox}>
+                  <Text style={styles.modalSummaryTitle}>
+                    {repeatTargetSession.title}
+                  </Text>
+                  <Text style={styles.modalSummaryText}>
+                    {repeatTargetSession.category} · €{repeatTargetSession.price}
+                  </Text>
+                  <Text style={styles.modalSummaryText}>
+                    Original: {formatSessionDate(repeatTargetSession.start_time)}
+                  </Text>
+                </View>
+              ) : null}
+
+              <View style={styles.repeatPickerStack}>
+                <Pressable
+                  onPress={() => setShowRepeatDatePicker(true)}
+                  style={({ pressed }) => [
+                    styles.repeatPickerCard,
+                    pressed && styles.secondaryPillPressed,
+                  ]}
+                >
+                  <Text style={styles.repeatPickerLabel}>New date</Text>
+                  <Text style={styles.repeatPickerValue}>
+                    {formattedRepeatDate}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setShowRepeatTimePicker(true)}
+                  style={({ pressed }) => [
+                    styles.repeatPickerCard,
+                    pressed && styles.secondaryPillPressed,
+                  ]}
+                >
+                  <Text style={styles.repeatPickerLabel}>New time</Text>
+                  <Text style={styles.repeatPickerValue}>
+                    {formattedRepeatTime}
+                  </Text>
+                </Pressable>
+              </View>
+
+              {showRepeatDatePicker ? (
+                <DateTimePicker
+                  value={repeatDateTime}
+                  mode="date"
+                  minimumDate={new Date()}
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  onChange={(_, selected) => {
+                    setShowRepeatDatePicker(Platform.OS === "ios");
+                    if (!selected) return;
+
+                    const next = new Date(repeatDateTime);
+                    next.setFullYear(
+                      selected.getFullYear(),
+                      selected.getMonth(),
+                      selected.getDate(),
+                    );
+                    setRepeatDateTime(next);
+                  }}
+                />
+              ) : null}
+
+              {showRepeatTimePicker ? (
+                <DateTimePicker
+                  value={repeatDateTime}
+                  mode="time"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  onChange={(_, selected) => {
+                    setShowRepeatTimePicker(Platform.OS === "ios");
+                    if (!selected) return;
+
+                    const next = new Date(repeatDateTime);
+                    next.setHours(
+                      selected.getHours(),
+                      selected.getMinutes(),
+                      0,
+                      0,
+                    );
+                    setRepeatDateTime(next);
+                  }}
+                />
+              ) : null}
+
+              <Text style={styles.modalHelperText}>
+                The copied session will be submitted for review before going
+                live.
+              </Text>
+
+              <Pressable
+                onPress={handleConfirmRepeat}
+                disabled={
+                  !!repeatTargetSession &&
+                  busySessionId === repeatTargetSession.id
+                }
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  pressed && styles.primaryButtonPressed,
+                  !!repeatTargetSession &&
+                    busySessionId === repeatTargetSession.id &&
+                    styles.primaryButtonDisabled,
+                ]}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {!!repeatTargetSession &&
+                  busySessionId === repeatTargetSession.id
+                    ? "Creating..."
+                    : "Create copy"}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={closeRepeatModal}
+                style={({ pressed }) => [
+                  styles.modalCancelButton,
+                  pressed && styles.secondaryPillPressed,
+                ]}
+              >
+                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
       </AppScreen>
     </AppLayout>
   );
@@ -1209,6 +1243,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.buttonPressed,
   },
 
+  primaryButtonDisabled: {
+    opacity: 0.7,
+  },
+
   primaryButtonText: {
     color: "#FFFFFF",
     fontSize: 15,
@@ -1245,5 +1283,91 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 10,
     color: COLORS.textSoft,
+  },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+
+  modalCard: {
+    borderRadius: 26,
+    borderWidth: 1.4,
+    borderColor: COLORS.borderStrong,
+    backgroundColor: COLORS.teacherPanel,
+    padding: 18,
+  },
+
+  modalHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 14,
+  },
+
+  modalHeaderText: {
+    flex: 1,
+  },
+
+  modalTitle: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: "900",
+    marginBottom: 6,
+  },
+
+  modalSubtitle: {
+    color: COLORS.textSoft,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
+  modalSummaryBox: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+    backgroundColor: COLORS.teacherPanelDeep,
+    padding: 14,
+    marginBottom: 14,
+  },
+
+  modalSummaryTitle: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "900",
+    marginBottom: 6,
+  },
+
+  modalSummaryText: {
+    color: COLORS.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  modalHelperText: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 12,
+    marginBottom: 12,
+  },
+
+  modalCancelButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: COLORS.buttonSecondary,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    marginTop: 10,
+  },
+
+  modalCancelButtonText: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "900",
   },
 });

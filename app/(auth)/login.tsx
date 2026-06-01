@@ -105,24 +105,33 @@ export default function LoginScreen() {
       <View style={styles.card}>
         <Text style={styles.title}>Login</Text>
 
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="sentences"
-          keyboardType="email-address"
-          placeholder="Email"
-          placeholderTextColor={COLORS.textMuted}
-          style={styles.input}
-        />
+<TextInput
+  value={email}
+  onChangeText={setEmail}
+  autoCapitalize="none"
+  autoCorrect={false}
+  keyboardType="email-address"
+  autoComplete="email"
+  textContentType="username"
+  importantForAutofill="yes"
+  placeholder="Email"
+  placeholderTextColor={COLORS.textMuted}
+  style={styles.input}
+/>
 
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          placeholder="Password"
-          placeholderTextColor={COLORS.textMuted}
-          style={styles.input}
-        />
+<TextInput
+  value={password}
+  onChangeText={setPassword}
+  secureTextEntry
+  autoCapitalize="none"
+  autoCorrect={false}
+  autoComplete="password"
+  textContentType="password"
+  importantForAutofill="yes"
+  placeholder="Password"
+  placeholderTextColor={COLORS.textMuted}
+  style={styles.input}
+/>
 
         <Pressable
           onPress={onLogin}

@@ -1105,14 +1105,7 @@ openTeacherNoShowModal(booking);    }}
 
           <Text style={styles.emptySubtitle}>{subtitle}</Text>
 
-          {showBrowse ? (
-            <Pressable
-              onPress={() => safeReplace("/(learner)/map")}
-              style={styles.primaryButton}
-            >
-              <Text style={styles.primaryButtonText}>Browse classes</Text>
-            </Pressable>
-          ) : null}
+
         </View>
       </View>
     );
