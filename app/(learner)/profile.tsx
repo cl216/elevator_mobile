@@ -242,7 +242,7 @@ export default function ProfileScreen() {
       const nextImageUrl = res.data?.image_url ?? uploadedUrl;
 
       await setImageUrl(nextImageUrl);
-
+await authStore.getState().refreshMe();
       if (isBookingPhotoFlow && returnToSessionId) {
         Alert.alert(
           "Photo added",

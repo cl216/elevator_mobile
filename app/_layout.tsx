@@ -185,7 +185,7 @@ export default function RootLayout() {
         type === "booking_cancelled_by_learner" ||
         type === "teacher_session_reminder_24h" ||
         type === "teacher_session_reminder_1h" ||
-          type === "teacher_attendance_check"
+        type === "teacher_attendance_check"
       ) {
         if (sessionId) {
           safePush({
@@ -199,7 +199,7 @@ export default function RootLayout() {
         return;
       }
 
-      safeReplace("/(learner)/map");
+console.log("Unhandled notification type:", type, data);
     };
 
     const receivedSub = Notifications.addNotificationReceivedListener(

@@ -83,7 +83,7 @@ const MAP_STYLE_URL = "mapbox://styles/mapbox/dark-v11";
 const MARKER_FETCH_PAD = 0.05;
 const NEARBY_SUGGESTION_PAD = 2.0;
 const SILENT_REFRESH_MS = 30000;
-const FALLBACK_LOCATION: [number, number] = [-8.4863, 53.2707];
+const FALLBACK_LOCATION: [number, number] = [-9.0568, 53.2707];
 
 const PRIMARY_CATEGORY_SLUGS = [
   "art",
@@ -460,13 +460,7 @@ useEffect(() => {
         setUserLocation(FALLBACK_LOCATION);
         setIsInitialLocationResolved(true);
 
-        if (!hasHydratedView || !savedMapCenter) {
-          cameraRef.current?.setCamera({
-            centerCoordinate: FALLBACK_LOCATION,
-            zoomLevel: 13.5,
-            animationDuration: 0,
-          });
-        }
+
 
         return;
       }
@@ -509,13 +503,7 @@ useEffect(() => {
       setUserLocation(FALLBACK_LOCATION);
       setIsInitialLocationResolved(true);
 
-      if (!hasHydratedView || !savedMapCenter) {
-        cameraRef.current?.setCamera({
-          centerCoordinate: FALLBACK_LOCATION,
-          zoomLevel: 13.5,
-          animationDuration: 0,
-        });
-      }
+
     }
   }
 
@@ -524,7 +512,7 @@ useEffect(() => {
   return () => {
     alive = false;
   };
-}, [hasFocusSessionParam, hasHydratedView, savedMapCenter]);
+}, []);
 
 useEffect(() => {
   const timeout = setTimeout(() => {
@@ -1317,18 +1305,46 @@ const handleDismissMapExplainCard = useCallback(() => {
     });
   }, [pendingBBox, primaryCategoriesToShow, selectedCategory, userLocation]);
 
-  const handleRecenterToUser = useCallback(() => {
-    if (!userLocation) return;
-
+const handleRecenterToUser = useCallback(async () => {
+  try {
     setSelectedSessionId(null);
     closeSessionSheet();
 
+    const { status } = await Location.requestForegroundPermissionsAsync();
+
+    if (status !== "granted") {
+      Alert.alert(
+        "Location permission needed",
+        "Please allow location access to center the map on your current location.",
+      );
+      return;
+    }
+
+    const current = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+
+    const nextLocation: [number, number] = [
+      current.coords.longitude,
+      current.coords.latitude,
+    ];
+
+    setUserLocation(nextLocation);
+    setLocError(null);
+
     cameraRef.current?.setCamera({
-      centerCoordinate: userLocation,
+      centerCoordinate: nextLocation,
       zoomLevel: Math.max(currentZoomRef.current, 13),
       animationDuration: 500,
     });
-  }, [userLocation, closeSessionSheet]);
+  } catch (e) {
+    console.log("handleRecenterToUser error", e);
+    Alert.alert(
+      "Could not get location",
+      "Please check location permissions and try again.",
+    );
+  }
+}, [closeSessionSheet]);
 
   function formatDistance(meters: number) {
     if (meters < 1000) return `${meters} m away`;
@@ -1407,10 +1423,8 @@ const handleDismissMapExplainCard = useCallback(() => {
 
 <Mapbox.UserLocation
   visible={true}
-  showsUserHeadingIndicator={true}
 />
 
-<Mapbox.UserLocation visible={true} />
           
 
           {showClusterSource ? (
@@ -1491,28 +1505,33 @@ const handleDismissMapExplainCard = useCallback(() => {
   allowOverlap
   anchor={{ x: 0.5, y: 1 }}
 >
-  <Pressable
-    collapsable={false}
-    hitSlop={20}
-    onPress={() => {
-      setSelectedSessionId(s.sessionId);
+<Pressable
+  collapsable={false}
+  hitSlop={{ top: 28, bottom: 28, left: 28, right: 28 }}
+  android_ripple={undefined}
+  unstable_pressDelay={0}
+  onPress={() => {
+    isManualSearchRef.current = true;
 
-      cameraRef.current?.setCamera({
-        centerCoordinate: [s.lng, s.lat],
-        zoomLevel: Math.max(
-          currentZoomRef.current,
-          CLUSTER_SWITCH_ZOOM + 0.5,
-        ),
-        animationDuration: 250,
-      });
+    setSelectedSessionId(s.sessionId);
 
-      openSessionSheet(s.sessionId);
-    }}
-    style={[
-      styles.markerPressable,
-      isSelected && styles.markerPressableSelected,
-    ]}
-  >
+    cameraRef.current?.setCamera({
+      centerCoordinate: [s.lng, s.lat],
+      zoomLevel: Math.max(currentZoomRef.current, 13.5),
+      animationDuration: 250,
+    });
+
+    openSessionSheet(s.sessionId);
+
+    setTimeout(() => {
+      isManualSearchRef.current = false;
+    }, 500);
+  }}
+  style={[
+    styles.markerPressable,
+    isSelected && styles.markerPressableSelected,
+  ]}
+>
     <TeacherMarker
       avatarUrl={s.teacherAvatarUrl}
       category={normalizeCategory(s.sessionCategory)}

@@ -27,3 +27,12 @@ export async function markNotificationRead(notificationId: string) {
   });
   return data;
 }
+export async function deleteNotification(notificationId: string) {
+  const res = await api.delete(`/notifications/${notificationId}`);
+  return res.data;
+}
+
+export async function clearNotifications() {
+  const res = await api.delete("/notifications");
+  return res.data;
+}

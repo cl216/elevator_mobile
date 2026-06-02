@@ -25,50 +25,38 @@ import { AppScreen } from "@/src/components/ui/AppScreen";
 
 const COLORS = {
   bg: "#05070F",
-
   teacherPanel: "#1A0627",
   teacherPanelSoft: "#250B38",
   teacherPanelDeep: "#100018",
-
   surface: "#170A24",
   surfaceSoft: "#211033",
-
   text: "#F5F8FF",
   textSoft: "rgba(235,220,255,0.76)",
   textMuted: "rgba(235,220,255,0.54)",
-
   border: "rgba(168,85,247,0.16)",
   borderStrong: "rgba(168,85,247,0.42)",
-
   accent: "#A855F7",
   accentStrong: "#C084FC",
   accentSoft: "rgba(168,85,247,0.16)",
   accentBorder: "rgba(168,85,247,0.34)",
-
   button: "#7C3AED",
   buttonPressed: "#6D28D9",
   buttonSecondary: "#211033",
-
   successBg: "rgba(81, 207, 102, 0.12)",
   successBorder: "rgba(81, 207, 102, 0.22)",
   successText: "#8CE99A",
-
   warningBg: "rgba(255, 193, 7, 0.12)",
   warningBorder: "rgba(255, 193, 7, 0.22)",
   warningText: "#FFD666",
-
   dangerBg: "rgba(255, 107, 107, 0.12)",
   dangerBorder: "rgba(255, 107, 107, 0.22)",
   dangerText: "#FFA8A8",
-
   infoBg: "rgba(168,85,247,0.12)",
   infoBorder: "rgba(168,85,247,0.22)",
   infoText: "#E9D5FF",
-
   neutralBg: "rgba(255,255,255,0.05)",
   neutralBorder: "rgba(255,255,255,0.08)",
   neutralText: "rgba(245,248,255,0.78)",
-
   divider: "rgba(255,255,255,0.06)",
 };
 
@@ -92,7 +80,7 @@ function isPastSession(startTime: string) {
   return new Date(startTime).getTime() < Date.now();
 }
 
-function needsAttendanceConfirmation(session: TeacherSession) {
+function canShowPostSessionPrompt(session: TeacherSession) {
   const start = new Date(session.start_time).getTime();
   const now = Date.now();
 
@@ -178,6 +166,9 @@ export default function TeacherSessionsScreen() {
   const [busySessionId, setBusySessionId] = useState<string | null>(null);
   const [stripeBlocked, setStripeBlocked] = useState(false);
   const [stripeBlockedMessage, setStripeBlockedMessage] = useState("");
+  const [dismissedPromptSessionIds, setDismissedPromptSessionIds] = useState<
+    string[]
+  >([]);
 
   const [repeatTargetSession, setRepeatTargetSession] =
     useState<TeacherSession | null>(null);
@@ -264,6 +255,12 @@ export default function TeacherSessionsScreen() {
           },
         },
       ],
+    );
+  }
+
+  function handleDismissPrompt(sessionId: string) {
+    setDismissedPromptSessionIds((prev) =>
+      prev.includes(sessionId) ? prev : [...prev, sessionId],
     );
   }
 
@@ -422,23 +419,23 @@ export default function TeacherSessionsScreen() {
       Number(session.max_participants) - bookingsCount,
     );
     const isBusy = busySessionId === session.id;
-    const attendanceNeeded = needsAttendanceConfirmation(session);
+    const showPostSessionPrompt =
+      canShowPostSessionPrompt(session) &&
+      !dismissedPromptSessionIds.includes(session.id);
 
     return (
       <SessionsCard
         key={session.id}
         icon={
-          attendanceNeeded
-            ? "alert-circle-outline"
-            : section === "upcoming"
-              ? "calendar-outline"
-              : section === "past"
-                ? "time-outline"
-                : "close-circle-outline"
+          section === "upcoming"
+            ? "calendar-outline"
+            : section === "past"
+              ? "time-outline"
+              : "close-circle-outline"
         }
         title={session.title}
         subtitle={`${session.category} · €${session.price}`}
-        highlight={!isBusy && (section === "upcoming" || attendanceNeeded)}
+        highlight={!isBusy && section === "upcoming"}
       >
         <Text style={styles.sessionMetaPrimary}>
           {formatSessionDate(session.start_time)}
@@ -467,33 +464,38 @@ export default function TeacherSessionsScreen() {
           </View>
         ) : null}
 
-        {attendanceNeeded ? (
+        {showPostSessionPrompt ? (
           <View style={styles.attendanceBox}>
             <View style={styles.attendanceHeaderRow}>
               <Ionicons
-                name="alert-circle-outline"
+                name="checkmark-circle-outline"
                 size={18}
                 color={COLORS.warningText}
               />
 
-              <Text style={styles.attendanceTitle}>
-                Attendance check needed
-              </Text>
+              <Text style={styles.attendanceTitle}>How did it go?</Text>
             </View>
 
             <Text style={styles.attendanceBody}>
-              This session has started. Open it to confirm attendance or report
-              a learner no-show within 24 hours.
+              No action is needed if everything was fine. Your payout process
+              continues automatically.
             </Text>
 
-            <Pressable
-              onPress={() => safePush(`/(teacher)/sessions/${session.id}`)}
-              style={styles.attendanceButton}
-            >
-              <Text style={styles.attendanceButtonText}>
-                Review attendance
-              </Text>
-            </Pressable>
+            <View style={styles.attendanceActionsRow}>
+              <Pressable
+                onPress={() => handleDismissPrompt(session.id)}
+                style={styles.attendanceButton}
+              >
+                <Text style={styles.attendanceButtonText}>All went well</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => safePush(`/(teacher)/sessions/${session.id}`)}
+                style={[styles.attendanceButton, styles.attendanceReportButton]}
+              >
+                <Text style={styles.attendanceButtonText}>Report issue</Text>
+              </Pressable>
+            </View>
           </View>
         ) : null}
 
@@ -507,32 +509,22 @@ export default function TeacherSessionsScreen() {
 
         <View style={styles.cardFooter}>
           <Text style={styles.dateText}>
-            {attendanceNeeded
-              ? "Action may be needed for learner attendance."
-              : section === "cancelled"
-                ? "This session is no longer bookable."
-                : section === "past"
-                  ? "Use repeat to create a new copy quickly."
-                  : "Manage this live session and view learner bookings."}
+            {section === "cancelled"
+              ? "This session is no longer bookable."
+              : section === "past"
+                ? "Use repeat to create a new copy quickly."
+                : "Manage this live session and view learner bookings."}
           </Text>
 
           <View style={styles.cardFooterActions}>
             <Pressable
               onPress={() => safePush(`/(teacher)/sessions/${session.id}`)}
               style={({ pressed }) => [
-                attendanceNeeded ? styles.attendancePill : styles.secondaryPill,
+                styles.secondaryPill,
                 pressed && styles.secondaryPillPressed,
               ]}
             >
-              <Text
-                style={
-                  attendanceNeeded
-                    ? styles.attendancePillText
-                    : styles.secondaryPillText
-                }
-              >
-                {attendanceNeeded ? "Review attendance" : "Open"}
-              </Text>
+              <Text style={styles.secondaryPillText}>Open</Text>
             </Pressable>
 
             {section === "upcoming" ? (
@@ -763,7 +755,8 @@ export default function TeacherSessionsScreen() {
                     {repeatTargetSession.title}
                   </Text>
                   <Text style={styles.modalSummaryText}>
-                    {repeatTargetSession.category} · €{repeatTargetSession.price}
+                    {repeatTargetSession.category} · €
+                    {repeatTargetSession.price}
                   </Text>
                   <Text style={styles.modalSummaryText}>
                     Original: {formatSessionDate(repeatTargetSession.start_time)}
@@ -886,9 +879,7 @@ export default function TeacherSessionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
+  screen: { flex: 1 },
 
   scrollContent: {
     paddingHorizontal: 20,
@@ -897,9 +888,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
 
-  hero: {
-    marginBottom: 22,
-  },
+  hero: { marginBottom: 22 },
 
   heroBadge: {
     alignSelf: "flex-start",
@@ -925,9 +914,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  heroTextWrap: {
-    flex: 1,
-  },
+  heroTextWrap: { flex: 1 },
 
   heroTitle: {
     color: COLORS.text,
@@ -963,13 +950,9 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  sectionWrap: {
-    marginBottom: 28,
-  },
+  sectionWrap: { marginBottom: 28 },
 
-  sectionWrapLast: {
-    marginBottom: 0,
-  },
+  sectionWrapLast: { marginBottom: 0 },
 
   sectionHeading: {
     color: COLORS.text,
@@ -1027,9 +1010,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  cardHeaderCopyShell: {
-    flex: 1,
-  },
+  cardHeaderCopyShell: { flex: 1 },
 
   cardShellTitle: {
     color: COLORS.text,
@@ -1134,15 +1115,26 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
 
+  attendanceActionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+  },
+
   attendanceButton: {
     alignSelf: "flex-start",
-    marginTop: 10,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
     backgroundColor: COLORS.accentSoft,
     borderWidth: 1,
     borderColor: COLORS.accentBorder,
+  },
+
+  attendanceReportButton: {
+    backgroundColor: COLORS.warningBg,
+    borderColor: COLORS.warningBorder,
   },
 
   attendanceButtonText: {
@@ -1185,9 +1177,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accentSoft,
   },
 
-  secondaryPillPressed: {
-    opacity: 0.86,
-  },
+  secondaryPillPressed: { opacity: 0.86 },
 
   secondaryPillText: {
     color: COLORS.text,
@@ -1253,9 +1243,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  repeatPickerStack: {
-    gap: 10,
-  },
+  repeatPickerStack: { gap: 10 },
 
   repeatPickerCard: {
     borderWidth: 1,
@@ -1306,9 +1294,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
 
-  modalHeaderText: {
-    flex: 1,
-  },
+  modalHeaderText: { flex: 1 },
 
   modalTitle: {
     color: COLORS.text,

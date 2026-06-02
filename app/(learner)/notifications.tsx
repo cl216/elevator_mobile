@@ -19,6 +19,8 @@ import {
   getMyNotifications,
   markAllNotificationsRead,
   markNotificationRead,
+  deleteNotification,
+  clearNotifications,
   type AppNotification,
 } from "../../src/api/notifications";
 
@@ -174,6 +176,48 @@ export default function NotificationsScreen() {
     }
   }
 
+  async function handleDeleteNotification(notificationId: string) {
+  try {
+    await deleteNotification(notificationId);
+
+    setNotifications((prev) =>
+      prev.filter((n) => n.id !== notificationId),
+    );
+  } catch (e) {
+    console.error(e);
+    Alert.alert(
+      "Delete failed",
+      "Could not delete notification.",
+    );
+  }
+}
+
+async function handleClearAllNotifications() {
+  Alert.alert(
+    "Clear notifications",
+    "Delete all notifications?",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete all",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await clearNotifications();
+            setNotifications([]);
+          } catch (e) {
+            console.error(e);
+            Alert.alert(
+              "Delete failed",
+              "Could not clear notifications.",
+            );
+          }
+        },
+      },
+    ],
+  );
+}
+
   async function handleOpenNotification(item: AppNotification) {
     await handleMarkOneRead(item);
 
@@ -261,6 +305,7 @@ export default function NotificationsScreen() {
     }
   }
 
+  
   async function handleOpenMap(item: AppNotification) {
     await handleMarkOneRead(item);
 
@@ -276,6 +321,7 @@ export default function NotificationsScreen() {
     }
   }
 
+  
   function renderTeacherResponseMessage(item: AppNotification) {
     const teacherResponseMessage = item.payload?.teacher_response_message;
 
@@ -331,57 +377,70 @@ export default function NotificationsScreen() {
 
         {renderTeacherResponseMessage(item)}
 
-        <View style={styles.cardFooter}>
-          <Text style={styles.dateText}>{formatDate(item.created_at)}</Text>
+<View style={styles.cardFooter}>
+  <Text style={styles.dateText}>{formatDate(item.created_at)}</Text>
 
-          {hasSession ? (
-            <View style={styles.cardFooterActions}>
-              <Pressable
-                onPress={() => void handleOpenMap(item)}
-                style={({ pressed }) => [
-                  styles.secondaryPill,
-                  pressed && styles.secondaryPillPressed,
-                ]}
-              >
-                <Text style={styles.secondaryPillText}>📍 Map</Text>
-              </Pressable>
+  <View style={styles.cardFooterActions}>
+    {hasSession ? (
+      <>
+        <Pressable
+          onPress={() => void handleOpenMap(item)}
+          style={({ pressed }) => [
+            styles.secondaryPill,
+            pressed && styles.secondaryPillPressed,
+          ]}
+        >
+          <Text style={styles.secondaryPillText}>📍 Map</Text>
+        </Pressable>
 
-              <Pressable
-                onPress={() => void handleOpenNotification(item)}
-                style={({ pressed }) => [
-                  styles.secondaryPill,
-                  pressed && styles.secondaryPillPressed,
-                ]}
-              >
-                <Text style={styles.secondaryPillText}>Open</Text>
-              </Pressable>
-            </View>
-          ) : isPrivateRequestAccepted ? (
-            <Pressable
-              onPress={() => void handleOpenNotification(item)}
-              style={({ pressed }) => [
-                styles.secondaryPill,
-                pressed && styles.secondaryPillPressed,
-              ]}
-            >
-              <Text style={styles.secondaryPillText}>Open session</Text>
-            </Pressable>
-          ) : isPrivateRequestDeclined ? (
-            <View style={styles.inlineStatusPill}>
-              <Text style={styles.inlineStatusPillText}>Viewed here</Text>
-            </View>
-          ) : (
-            <Pressable
-              onPress={() => void handleOpenNotification(item)}
-              style={({ pressed }) => [
-                styles.secondaryPill,
-                pressed && styles.secondaryPillPressed,
-              ]}
-            >
-              <Text style={styles.secondaryPillText}>Open</Text>
-            </Pressable>
-          )}
-        </View>
+        <Pressable
+          onPress={() => void handleOpenNotification(item)}
+          style={({ pressed }) => [
+            styles.secondaryPill,
+            pressed && styles.secondaryPillPressed,
+          ]}
+        >
+          <Text style={styles.secondaryPillText}>Open</Text>
+        </Pressable>
+      </>
+    ) : isPrivateRequestAccepted ? (
+      <Pressable
+        onPress={() => void handleOpenNotification(item)}
+        style={({ pressed }) => [
+          styles.secondaryPill,
+          pressed && styles.secondaryPillPressed,
+        ]}
+      >
+        <Text style={styles.secondaryPillText}>Open session</Text>
+      </Pressable>
+    ) : isPrivateRequestDeclined ? (
+      <View style={styles.inlineStatusPill}>
+        <Text style={styles.inlineStatusPillText}>Viewed here</Text>
+      </View>
+    ) : (
+      <Pressable
+        onPress={() => void handleOpenNotification(item)}
+        style={({ pressed }) => [
+          styles.secondaryPill,
+          pressed && styles.secondaryPillPressed,
+        ]}
+      >
+        <Text style={styles.secondaryPillText}>Open</Text>
+      </Pressable>
+    )}
+
+    <Pressable
+      onPress={() => void handleDeleteNotification(item.id)}
+      style={({ pressed }) => [
+        styles.secondaryPill,
+        styles.deletePill,
+        pressed && styles.secondaryPillPressed,
+      ]}
+    >
+      <Text style={styles.deletePillText}>Delete</Text>
+    </Pressable>
+  </View>
+</View>
       </NotificationsCard>
     );
   }
@@ -427,32 +486,44 @@ export default function NotificationsScreen() {
             </View>
 
             {!loading && !error && notifications.length > 0 ? (
-              <View style={styles.topRow}>
-                <Text style={styles.unreadCountText}>{unreadCount} unread</Text>
+<View style={styles.topRow}>
+  <Text style={styles.unreadCountText}>{unreadCount} unread</Text>
 
-                <Pressable
-                  onPress={handleMarkAllRead}
-                  disabled={markingRead || unreadCount === 0}
-                  style={({ pressed }) => [
-                    styles.markAllButton,
-                    (markingRead || unreadCount === 0) &&
-                    styles.markAllButtonDisabled,
-                    pressed &&
-                    !(markingRead || unreadCount === 0) &&
-                    styles.markAllButtonPressed,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.markAllButtonText,
-                      (markingRead || unreadCount === 0) &&
-                      styles.markAllButtonTextDisabled,
-                    ]}
-                  >
-                    {markingRead ? "Marking..." : "Mark all read"}
-                  </Text>
-                </Pressable>
-              </View>
+  <View style={styles.cardFooterActions}>
+    <Pressable
+      onPress={handleMarkAllRead}
+      disabled={markingRead || unreadCount === 0}
+      style={({ pressed }) => [
+        styles.markAllButton,
+        (markingRead || unreadCount === 0) && styles.markAllButtonDisabled,
+        pressed &&
+          !(markingRead || unreadCount === 0) &&
+          styles.markAllButtonPressed,
+      ]}
+    >
+      <Text
+        style={[
+          styles.markAllButtonText,
+          (markingRead || unreadCount === 0) &&
+            styles.markAllButtonTextDisabled,
+        ]}
+      >
+        {markingRead ? "Marking..." : "Mark all read"}
+      </Text>
+    </Pressable>
+
+    <Pressable
+      onPress={handleClearAllNotifications}
+      style={({ pressed }) => [
+        styles.markAllButton,
+        styles.clearAllButton,
+        pressed && styles.markAllButtonPressed,
+      ]}
+    >
+      <Text style={styles.clearAllButtonText}>Clear all</Text>
+    </Pressable>
+  </View>
+</View>
             ) : null}
 
             {loading ? (
@@ -845,4 +916,24 @@ const styles = StyleSheet.create({
     color: COLORS.textSoft,
     lineHeight: 20,
   },
+  deletePill: {
+  borderColor: "rgba(255, 107, 107, 0.28)",
+  backgroundColor: "rgba(255, 107, 107, 0.12)",
+},
+
+deletePillText: {
+  color: "#FFA8A8",
+  fontWeight: "800",
+},
+
+clearAllButton: {
+  borderColor: "rgba(255, 107, 107, 0.28)",
+  backgroundColor: "rgba(255, 107, 107, 0.12)",
+},
+
+clearAllButtonText: {
+  color: "#FFA8A8",
+  fontWeight: "800",
+},
+
 });

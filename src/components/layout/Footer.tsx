@@ -78,10 +78,10 @@ export default function Footer({
         return routeName.includes("(learner)") && routeName.includes("map");
       });
 
-if (mapIndex === -1) {
-  safeReplace("/(learner)/map");
-  return CommonActions.setParams({});
-}
+      if (mapIndex === -1) {
+        safeReplace("/(learner)/map");
+        return CommonActions.setParams({});
+      }
 
       return CommonActions.reset({
         ...state,
@@ -101,19 +101,19 @@ if (mapIndex === -1) {
     unlockNav();
   };
 
-const handleTeachPress = () => {
-  if (isTeacher || navLockedRef.current) return;
+  const handleTeachPress = () => {
+    if (isTeacher || navLockedRef.current) return;
 
-  navLockedRef.current = true;
+    navLockedRef.current = true;
 
-  if (hasTeacherProfile) {
-    safePush("/(teacher)/dashboard");
-  } else {
-    safePush("/(teacher)/profile");
-  }
+    if (hasTeacherProfile) {
+      safePush("/(teacher)/dashboard");
+    } else {
+      safePush("/(teacher)/profile");
+    }
 
-  unlockNav();
-};
+    unlockNav();
+  };
 
   return (
     <View
@@ -126,11 +126,11 @@ const handleTeachPress = () => {
         },
       ]}
     >
-<Pressable
-  disabled={isTeacher}
-  onPress={handleTeachPress}
-  style={styles.footerItem}
->        <View style={styles.footerItemInner}>
+      <Pressable
+        disabled={isTeacher}
+        onPress={handleTeachPress}
+        style={styles.footerItem}>
+        <View style={styles.footerItemInner}>
           <View style={styles.footerIconWrap}>
             <Ionicons
               name={isTeacher ? "school" : "school-outline"}
