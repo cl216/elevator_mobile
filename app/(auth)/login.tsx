@@ -112,7 +112,7 @@ export default function LoginScreen() {
   autoCorrect={false}
   keyboardType="email-address"
   autoComplete="email"
-  textContentType="username"
+textContentType="emailAddress"
   importantForAutofill="yes"
   placeholder="Email"
   placeholderTextColor={COLORS.textMuted}

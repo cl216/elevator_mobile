@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { mediaUrl } from "@/src/utils/mediaUrl";
 import { autoCapitalize } from "@/src/utils/text";
 import { ExplainCard } from "@/src/components/ui/ExplainCard";
+import { useMapViewStore } from "@/src/store/mapView.store";
 import {
   ActivityIndicator,
   Alert,
@@ -125,6 +126,7 @@ function PreviewGalleryTile({
 }
 
 export default function TeacherProfileScreen() {
+  const clearMapView = useMapViewStore((s) => s.clearMapView);
   const hasTeacherProfile = authStore((s) => s.hasTeacherProfile);
   const currentUser = authStore((s: any) => s.user);
 
@@ -192,7 +194,8 @@ const [showIntroCard, setShowIntroCard] = useState(!hasTeacherProfile);
     }
   }, [currentUser, hasTeacherProfile, fullName]);
 
-  async function pickImage(setter: (uri: string) => void) {
+async function pickImage(setter: (uri: string) => void) {
+  try {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
@@ -221,7 +224,14 @@ const [showIntroCard, setShowIntroCard] = useState(!hasTeacherProfile);
     });
 
     setter(safeUri);
+  } catch (e: any) {
+    console.error("pick teacher image failed", e);
+    Alert.alert(
+      "Photo error",
+      e?.message ?? "Could not choose this photo. Please try another image.",
+    );
   }
+}
 
   async function handleSave() {
     if (!fullName.trim()) {
@@ -331,6 +341,7 @@ Profiles with clear photos and friendly descriptions usually get more bookings."
   dismissText="Maybe later"
 onDismiss={() => {
   setShowIntroCard(false);
+  clearMapView();
   safeReplace("/(learner)/map");
 }}
   accentColor={COLORS.accentStrong}

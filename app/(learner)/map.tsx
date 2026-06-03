@@ -1047,20 +1047,24 @@ const fetchNearbySuggestions = useCallback(
         return;
       }
 
-      if (props.sessionId) {
-        const sessionId = String(props.sessionId);
-        setSelectedSessionId(sessionId);
-        openSessionSheet(sessionId);
-      }
+if (props.sessionId) {
+  const sessionId = String(props.sessionId);
 
-      cameraRef.current?.setCamera({
-        centerCoordinate: coordinates as [number, number],
-        zoomLevel: Math.max(
-          CLUSTER_SWITCH_ZOOM + 0.5,
-          currentZoomRef.current + 1,
-        ),
-        animationDuration: 250,
-      });
+  if (currentZoomRef.current < CLUSTER_SWITCH_ZOOM) {
+    setSelectedSessionId(null);
+
+    cameraRef.current?.setCamera({
+      centerCoordinate: coordinates as [number, number],
+      zoomLevel: CLUSTER_SWITCH_ZOOM + 0.75,
+      animationDuration: 300,
+    });
+
+    return;
+  }
+
+  setSelectedSessionId(sessionId);
+  openSessionSheet(sessionId);
+}
     },
     [openSessionSheet],
   );

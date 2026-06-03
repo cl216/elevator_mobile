@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
+import { useFocusEffect } from "@react-navigation/native";import {
   getTeacherAttentionSummary,
   type TeacherAttentionSummary,
 } from "@/src/api/teacherAttention";
@@ -186,6 +186,12 @@ const [checkingExplainCard, setCheckingExplainCard] =
     loadDashboard();
   }, [loadDashboard]);
 
+  useFocusEffect(
+  useCallback(() => {
+    void loadDashboard();
+  }, [loadDashboard]),
+);
+  
 useEffect(() => {
   (async () => {
     try {
@@ -223,6 +229,20 @@ useEffect(() => {
   const demandEmpty =
     demand.existing_categories.length === 0 &&
     demand.custom_ideas.length === 0;
+
+    function handleStripeOnboardingPress() {
+  Alert.alert(
+    "Before Stripe opens",
+    "When Stripe asks for 'Business Details', choose Consulting services. Then in product description say something like 'using elevator app'",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Continue to Stripe",
+        onPress: () => void handleStripeOnboarding(),
+      },
+    ],
+  );
+}
 
   async function handleStripeOnboarding() {
     try {
@@ -484,7 +504,7 @@ Good photos and beginner-friendly sessions usually perform best."
                         ? "Opening Stripe..."
                         : "Continue Stripe onboarding"
                     }
-                    onPress={handleStripeOnboarding}
+onPress={handleStripeOnboardingPress}
                   />
                 ) : null}
               </DashboardCard>

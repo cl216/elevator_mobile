@@ -80,17 +80,19 @@ export default function RootLayout() {
 
       try {
         const refreshedToken = await state.refreshAccessToken();
-
-        if (!refreshedToken) {
-          safeReplace("/(auth)/login");
-          return;
-        }
+        
+if (!refreshedToken) {
+  console.warn("Session refresh returned no token on resume; keeping current session.");
+  return;
+}
 
         await authStore.getState().refreshMe();
       } catch (error) {
-        console.error("Session refresh on resume failed:", error);
-        await authStore.getState().logout();
-        safeReplace("/(auth)/login");
+console.error("Session refresh on resume failed:", error);
+
+// Do not logout on app resume failure.
+// The user may just have weak signal/background network issues.
+// If the token is truly invalid, the API interceptor will handle a real 401 later.
       }
     };
 
