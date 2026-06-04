@@ -13,14 +13,17 @@ import {
   Alert,
   Animated,
   Easing,
-  Image, Modal, Pressable,
+  Image,
+  Modal,
+  Pressable,
   StyleSheet,
   Text,
-  View
+  View,
 } from "react-native";
+
+import { TouchableOpacity } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMapViewStore } from "../../src/store/mapView.store";
-
 import {
   getApprovedCategories,
   type ApprovedCategory,
@@ -329,10 +332,12 @@ function TeacherMarker({
   avatarUrl,
   category = "other",
   selected = false,
+  onImageLoad,
 }: {
   avatarUrl?: string;
   category?: MarkerCategory;
   selected?: boolean;
+  onImageLoad?: () => void;
 }) {
   const badge = getCategoryBadge(category);
 
@@ -346,7 +351,11 @@ function TeacherMarker({
       >
         <View style={styles.customMarkerAvatarInner}>
           {avatarUrl ? (
-<Image source={{ uri: mediaUrl(avatarUrl)! }} style={styles.customMarkerAvatarImage} />          ) : (
+<Image
+              source={{ uri: mediaUrl(avatarUrl)! }}
+              style={styles.customMarkerAvatarImage}
+              onLoad={onImageLoad}
+            />          ) : (
             <View style={styles.customMarkerAvatarFallback}>
               <Ionicons name="person" size={26} color="#dbe7ff" />
             </View>
@@ -723,6 +732,10 @@ const loadUpcomingBookingsCount = useCallback(async () => {
     }, [loadUnreadNotificationsCount, loadUpcomingBookingsCount]),
   );
 
+  
+
+  
+
  ////FOR TESTING EXPLAINCARD
 // useEffect(() => {
 //   setShowMapExplainCard(true);
@@ -896,6 +909,23 @@ const fetchNearbySuggestions = useCallback(
     [],
   );
 
+  useFocusEffect(
+  useCallback(() => {
+    if (!isInitialLocationResolved) return;
+    if (!lastSearchedBBoxRef.current) return;
+    if (isFetchingMapRef.current) return;
+if (!activeSearchRef.current) return;
+    void fetchSessionsForBBox(
+      lastSearchedBBoxRef.current,
+      selectedCategory,
+      {
+        silent: true,
+        commitActiveSearch: true,
+      },
+    );
+  }, [fetchSessionsForBBox, isInitialLocationResolved, selectedCategory]),
+);
+
   const fetchForCurrentMapNow = useCallback(async () => {
     try {
           if (isManualSearchRef.current) return;
@@ -1018,56 +1048,39 @@ const fetchNearbySuggestions = useCallback(
     }
   }, [selectedCategory]);
 
-  const handleShapeSourcePress = useCallback(
-    async (event: any) => {
-      const feature = event?.features?.[0];
-      if (!feature) return;
+  const handleShapeSourcePress = useCallback(async (event: any) => {
+    const feature = event?.features?.[0];
+    if (!feature) return;
 
-      const props = feature.properties ?? {};
-      const coordinates = feature.geometry?.coordinates;
-      if (!Array.isArray(coordinates)) return;
+    const props = feature.properties ?? {};
+    const coordinates = feature.geometry?.coordinates;
+    if (!Array.isArray(coordinates)) return;
 
-      if (props.cluster) {
-        if (shapeSourceRef.current) {
-          try {
-            const expansionZoom =
-              await shapeSourceRef.current.getClusterExpansionZoom(feature);
+    if (!props.cluster) return;
 
-            setSelectedSessionId(null);
+    if (shapeSourceRef.current) {
+      try {
+        const expansionZoom =
+          await shapeSourceRef.current.getClusterExpansionZoom(feature);
 
-            cameraRef.current?.setCamera({
-              centerCoordinate: coordinates as [number, number],
-              zoomLevel: expansionZoom,
-              animationDuration: 250,
-            });
-          } catch (e) {
-            console.log("cluster expansion failed", e);
-          }
-        }
-        return;
+        setSelectedSessionId(null);
+
+        cameraRef.current?.setCamera({
+          centerCoordinate: coordinates as [number, number],
+          zoomLevel: Math.max(expansionZoom, CLUSTER_SWITCH_ZOOM + 0.75),
+          animationDuration: 250,
+        });
+      } catch (e) {
+        console.log("cluster expansion failed", e);
+
+        cameraRef.current?.setCamera({
+          centerCoordinate: coordinates as [number, number],
+          zoomLevel: CLUSTER_SWITCH_ZOOM + 0.75,
+          animationDuration: 250,
+        });
       }
-
-if (props.sessionId) {
-  const sessionId = String(props.sessionId);
-
-  if (currentZoomRef.current < CLUSTER_SWITCH_ZOOM) {
-    setSelectedSessionId(null);
-
-    cameraRef.current?.setCamera({
-      centerCoordinate: coordinates as [number, number],
-      zoomLevel: CLUSTER_SWITCH_ZOOM + 0.75,
-      animationDuration: 300,
-    });
-
-    return;
-  }
-
-  setSelectedSessionId(sessionId);
-  openSessionSheet(sessionId);
-}
-    },
-    [openSessionSheet],
-  );
+    }
+  }, []);
 
    //FOR TESTING EXPLAINCARD
 // useEffect(() => {
@@ -1373,11 +1386,13 @@ const handleRecenterToUser = useCallback(async () => {
             prepareSearchThisArea();
             updateVisibleBBox();
           }}
-          onPress={() => {
-            setSelectedSessionId(null);
-            closeSessionSheet();
-            setShowCategoryMenu(false);
-          }}
+onPress={() => {
+  if (isManualSearchRef.current) return;
+
+  setSelectedSessionId(null);
+  closeSessionSheet();
+  setShowCategoryMenu(false);
+}}
           onCameraChanged={(e) => {
             const z = e?.properties?.zoom;
             const center = e?.properties?.center;
@@ -1431,120 +1446,111 @@ const handleRecenterToUser = useCallback(async () => {
 
           
 
-          {showClusterSource ? (
-            <Mapbox.ShapeSource
-              id="sessions-clusters"
-              ref={(r) => {
-                shapeSourceRef.current = r;
-              }}
-              shape={sessionFeatureCollection}
-              cluster
-              clusterRadius={CLUSTER_RADIUS}
-              clusterMaxZoomLevel={CLUSTER_SWITCH_ZOOM}
-              onPress={handleShapeSourcePress}
-            >
-              <Mapbox.CircleLayer
-                id="cluster-circles"
-                filter={["has", "point_count"]}
-                style={{
-                  circleColor: "#101623",
-                  circleOpacity: 0.96,
-                  circleStrokeWidth: 2,
-                  circleStrokeColor: COLORS.accent,
-                  circleRadius: ["step", ["get", "point_count"], 22, 8, 26, 20, 30, 40, 36],
-                }}
-              />
-              <Mapbox.SymbolLayer
-                id="cluster-count"
-                filter={["has", "point_count"]}
-                style={{
-                  textField: ["get", "point_count_abbreviated"],
-                  textSize: 13,
-                  textColor: "#FFFFFF",
-                  textIgnorePlacement: true,
-                  textAllowOverlap: true,
-                }}
-              />
-              <Mapbox.CircleLayer
-                id="singleton-circles"
-                filter={["!", ["has", "point_count"]]}
-                style={{
-                  circleColor: "#101623",
-                  circleOpacity: 0.96,
-                  circleStrokeWidth: 2,
-                  circleStrokeColor: COLORS.accent,
-                  circleRadius: 18,
-                }}
-              />
-              <Mapbox.SymbolLayer
-                id="singleton-count"
-                filter={["!", ["has", "point_count"]]}
-                style={{
-                  textField: "1",
-                  textSize: 12,
-                  textColor: "#FFFFFF",
-                  textIgnorePlacement: true,
-                  textAllowOverlap: true,
-                }}
-              />
-            </Mapbox.ShapeSource>
-          ) : null}
+<Mapbox.ShapeSource
+  id="sessions-clusters"
+  ref={(r) => {
+    shapeSourceRef.current = r;
+  }}
+  shape={sessionFeatureCollection}
+  cluster
+  clusterRadius={CLUSTER_RADIUS}
+  clusterMaxZoomLevel={CLUSTER_SWITCH_ZOOM}
+  onPress={handleShapeSourcePress}
+>
+  <Mapbox.CircleLayer
+    id="cluster-circles"
+    filter={[
+      "all",
+      ["has", "point_count"],
+      ["<", ["zoom"], CLUSTER_SWITCH_ZOOM],
+    ]}
+    style={{
+      circleColor: "#101623",
+      circleOpacity: 0.96,
+      circleStrokeWidth: 2,
+      circleStrokeColor: COLORS.accent,
+      circleRadius: ["step", ["get", "point_count"], 22, 8, 26, 20, 30, 40, 36],
+    }}
+  />
+
+  <Mapbox.SymbolLayer
+    id="cluster-count"
+    filter={[
+      "all",
+      ["has", "point_count"],
+      ["<", ["zoom"], CLUSTER_SWITCH_ZOOM],
+    ]}
+    style={{
+      textField: ["get", "point_count_abbreviated"],
+      textSize: 13,
+      textColor: "#FFFFFF",
+      textIgnorePlacement: true,
+      textAllowOverlap: true,
+    }}
+  />
+</Mapbox.ShapeSource>
 
 {showCustomMarkers &&
   sessions
     .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng))
-    .map((s, index) => {
+    .map((s, index) => ({ session: s, originalIndex: index }))
+    .sort((a, b) => {
+      const aSelected = a.session.sessionId === selectedSessionId;
+      const bSelected = b.session.sessionId === selectedSessionId;
+
+      if (aSelected && !bSelected) return -1;
+      if (!aSelected && bSelected) return 1;
+      return 0;
+    })
+    .map(({ session: s, originalIndex }) => {
       const isSelected = selectedSessionId === s.sessionId;
 
       const markerLng =
-        s.lng + ((index % 3) - 1) * 0.00008;
+        s.lng + ((originalIndex % 3) - 1) * 0.00008;
 
       const markerLat =
-        s.lat + (Math.floor(index / 3) % 3 - 1) * 0.00008;
+        s.lat + (Math.floor(originalIndex / 3) % 3 - 1) * 0.00008;
 
       return (
         <Mapbox.MarkerView
-  key={s.sessionId}
-  coordinate={[markerLng, markerLat]}
-  allowOverlap
-  anchor={{ x: 0.5, y: 1 }}
->
-<Pressable
-  collapsable={false}
-  hitSlop={{ top: 28, bottom: 28, left: 28, right: 28 }}
-  android_ripple={undefined}
-  unstable_pressDelay={0}
+key={s.sessionId}
+          coordinate={[markerLng, markerLat]}
+          allowOverlap
+          anchor={{ x: 0.5, y: 1 }}
+        >
+          <TouchableOpacity
+  activeOpacity={0.85}
   onPress={() => {
-    isManualSearchRef.current = true;
+              isManualSearchRef.current = true;
 
-    setSelectedSessionId(s.sessionId);
+              setSelectedSessionId(s.sessionId);
 
-    cameraRef.current?.setCamera({
-      centerCoordinate: [s.lng, s.lat],
-      zoomLevel: Math.max(currentZoomRef.current, 13.5),
-      animationDuration: 250,
-    });
+              cameraRef.current?.setCamera({
+                centerCoordinate: [s.lng, s.lat],
+                zoomLevel: Math.max(currentZoomRef.current, 13.5),
+                animationDuration: 250,
+              });
 
-    openSessionSheet(s.sessionId);
+              openSessionSheet(s.sessionId);
 
-    setTimeout(() => {
-      isManualSearchRef.current = false;
-    }, 500);
-  }}
-  style={[
-    styles.markerPressable,
-    isSelected && styles.markerPressableSelected,
-  ]}
->
-    <TeacherMarker
-      avatarUrl={s.teacherAvatarUrl}
-      category={normalizeCategory(s.sessionCategory)}
-      selected={isSelected}
-    />
-  </Pressable>
-</Mapbox.MarkerView>
-                );
-              })}
+              setTimeout(() => {
+                isManualSearchRef.current = false;
+              }, 500);
+            }}
+            style={[
+              styles.markerPressable,
+              isSelected && styles.markerPressableSelected,
+            ]}
+          >
+            <TeacherMarker
+              avatarUrl={s.teacherAvatarUrl}
+              category={normalizeCategory(s.sessionCategory)}
+              selected={isSelected}
+            />
+          </TouchableOpacity>
+        </Mapbox.MarkerView>
+      );
+    })}
         </Mapbox.MapView>
 
 
@@ -2159,14 +2165,14 @@ const styles = StyleSheet.create({
   },
 
 
-  markerPressable: {
-    width: 82,
-    height: 100,
+markerPressable: {
+  width: 74,
+  height: 92,
     alignItems: "center",
     justifyContent: "flex-start",
   },
   markerPressableSelected: {
-    transform: [{ translateY: -6 }, { scale: 1.03 }],
+    transform: [{ translateY: -14 }, { scale: 1.12 }],
   },
 
   customMarkerWrap: {
@@ -2176,7 +2182,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
   customMarkerWrapSelected: {
-    transform: [{ translateY: -4 }],
+    transform: [{ translateY: -16 }, { scale: 1.18 }],
   },
   customMarkerAvatarOuter: {
     width: 66,
@@ -2195,9 +2201,10 @@ const styles = StyleSheet.create({
   },
   customMarkerAvatarOuterSelected: {
     borderColor: "#A9C7FF",
-    shadowOpacity: 0.45,
-    shadowRadius: 14,
-    transform: [{ scale: 1.04 }],
+    borderWidth: 4,
+    shadowOpacity: 0.6,
+    shadowRadius: 18,
+    elevation: 14,
   },
   customMarkerAvatarInner: {
     width: 58,
