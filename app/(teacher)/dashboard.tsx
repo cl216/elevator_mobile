@@ -233,7 +233,7 @@ useEffect(() => {
     function handleStripeOnboardingPress() {
   Alert.alert(
     "Before Stripe opens",
-    "When Stripe asks for 'Business Details', choose Consulting services. Then in product description say something like 'using elevator app'",
+  "• Business type: Select 'Individual / Sole Trader'\n\n• Business details: Select 'Consulting Services'\n\n• Product description: Enter something like 'Teaching lessons through the Elevator app'\n\n•",    
     [
       { text: "Cancel", style: "cancel" },
       {

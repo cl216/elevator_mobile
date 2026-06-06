@@ -447,8 +447,10 @@ const isFetchingMapRef = useRef(false);
   const [pendingBBox, setPendingBBox] = useState<BBox | null>(null);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
 
-  const showClusterSource = zoomLevel < CLUSTER_SWITCH_ZOOM;
-  const showCustomMarkers = zoomLevel >= CLUSTER_SWITCH_ZOOM;
+const effectiveZoom = zoomLevel || currentZoomRef.current || INITIAL_ZOOM;
+
+const showClusterSource = effectiveZoom < CLUSTER_SWITCH_ZOOM;
+const showCustomMarkers = effectiveZoom >= CLUSTER_SWITCH_ZOOM;
 
   const sessionFeatureCollection = useMemo(
     () => sessionsToFeatureCollection(sessions),
@@ -1221,7 +1223,7 @@ const handleDismissMapExplainCard = useCallback(() => {
     setShowSearchThisArea(false);
 
     await updateVisibleBBox();
-
+setZoomLevel(currentZoomRef.current);
     const next = await fetchSessionsForBBox(pendingBBox, selectedCategory, {
       commitActiveSearch: true,
     });
