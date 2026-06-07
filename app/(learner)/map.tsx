@@ -439,6 +439,7 @@ const isFetchingMapRef = useRef(false);
   const [sheetSessionId, setSheetSessionId] = useState<string | null>(null);
   const [isMapLoading, setIsMapLoading] = useState(false);
   const [sessions, setSessions] = useState<MapSessionPreview[]>([]);
+  const [markerRenderNonce, setMarkerRenderNonce] = useState(0);
   const [locError, setLocError] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(INITIAL_ZOOM);
   const [visibleBBox, setVisibleBBox] = useState<BBox | null>(null);
@@ -877,7 +878,13 @@ const fetchNearbySuggestions = useCallback(
           }))
           .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng));
 
-        setSessions(next);
+setSessions(next);
+setZoomLevel(currentZoomRef.current || INITIAL_ZOOM);
+setMarkerRenderNonce((n) => n + 1);
+
+setTimeout(() => {
+  setMarkerRenderNonce((n) => n + 1);
+}, 80);
 
         if (commitActiveSearch) {
           activeSearchRef.current = { bbox, category };
@@ -1223,7 +1230,6 @@ const handleDismissMapExplainCard = useCallback(() => {
     setShowSearchThisArea(false);
 
     await updateVisibleBBox();
-setZoomLevel(currentZoomRef.current);
     const next = await fetchSessionsForBBox(pendingBBox, selectedCategory, {
       commitActiveSearch: true,
     });
@@ -1515,7 +1521,7 @@ onPress={() => {
 
       return (
         <Mapbox.MarkerView
-key={s.sessionId}
+key={`${s.sessionId}-${markerRenderNonce}`}
           coordinate={[markerLng, markerLat]}
           allowOverlap
           anchor={{ x: 0.5, y: 1 }}
