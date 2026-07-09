@@ -22,6 +22,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -202,6 +203,8 @@ export const SessionBottomSheet = forwardRef<any, Props>(
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const [acceptedPolicy, setAcceptedPolicy] = useState(false);
+
     const [viewerVisible, setViewerVisible] = useState(false);
     const [viewerIndex, setViewerIndex] = useState(0);
 
@@ -294,17 +297,26 @@ export const SessionBottomSheet = forwardRef<any, Props>(
       return () => cancelAnimationFrame(frame);
     }, [viewerVisible, viewerIndex]);
 
-    const handleReserve = () => {
-      if (!session?.id || (session?.spots_left ?? 1) <= 0) return;
+const [showBookingConfirm, setShowBookingConfirm] = useState(false);
 
-      navigatingAwayFromTeacherRef.current = true;
-      modalRef.current?.dismiss();
-      onClose();
+const handleReserve = () => {
+  if (!session?.id || (session?.spots_left ?? 1) <= 0) return;
 
-      requestAnimationFrame(() => {
-        safePush(`/(modal)/booking/${session.id}`);
-      });
-    };
+  setAcceptedPolicy(false);
+  setShowBookingConfirm(true);
+};
+
+const continueBooking = () => {
+  setShowBookingConfirm(false);
+
+  navigatingAwayFromTeacherRef.current = true;
+  modalRef.current?.dismiss();
+  onClose();
+
+  requestAnimationFrame(() => {
+    safePush(`/(modal)/booking/${session!.id}`);
+  });
+};
 
     const handleTeacherPress = () => {
       if (!teacherId) return;
@@ -686,6 +698,201 @@ snapPoints={["82%", "96%"]}
           </View>
         </Modal>
 
+<Modal
+  visible={showBookingConfirm}
+  transparent
+  animationType="fade"
+  onRequestClose={() => setShowBookingConfirm(false)}
+>
+  <View
+    style={{
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.65)",
+      justifyContent: "center",
+      padding: 22,
+    }}
+  >
+    <View
+      style={{
+        backgroundColor: COLORS.surface,
+        borderRadius: 20,
+        padding: 22,
+      }}
+    >
+      <Text
+        style={{
+          color: COLORS.text,
+          fontSize: 22,
+          fontWeight: "800",
+          marginBottom: 12,
+        }}
+      >
+        Before you book
+      </Text>
+
+      <Text
+        style={{
+          color: COLORS.textSoft,
+          lineHeight: 23,
+        }}
+      >
+Please review the booking terms below before continuing to payment.
+      </Text>
+
+      <View style={{ marginTop: 18 }}>
+
+        <Text style={{ color: COLORS.textSoft, lineHeight: 24 }}>
+• Teacher cancels → 100% refund.
+
+• You cancel at least 12 hours before the lesson →
+Lesson price and Elevator service fee refunded.
+
+• Stripe's payment processing fee is non-refundable.
+
+• Less than 12 hours before the lesson →
+No refund.
+        </Text>
+
+        <Text style={{ color: COLORS.textSoft, lineHeight: 24 }}>
+          • You cancel 12+ hours before → Lesson price and Elevator fee refunded.
+        </Text>
+
+        <Text style={{ color: COLORS.textSoft, lineHeight: 24 }}>
+          • Stripe processing fees are non-refundable.
+        </Text>
+
+        <Text style={{ color: COLORS.textSoft, lineHeight: 24 }}>
+          • Less than 12 hours before the lesson → No refund.
+        </Text>
+
+      </View>
+
+      <Pressable
+        onPress={() => setAcceptedPolicy(!acceptedPolicy)}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          marginTop: 22,
+        }}
+      >
+        <Ionicons
+          name={
+            acceptedPolicy
+              ? "checkbox"
+              : "square-outline"
+          }
+          size={24}
+          color={COLORS.accent}
+        />
+
+        <Text
+          style={{
+            color: COLORS.textSoft,
+            marginLeft: 10,
+            flex: 1,
+            lineHeight: 22,
+          }}
+        >
+I have read and agree to the Cancellation Policy, Refund Policy and Terms of Service.        </Text>
+      </Pressable>
+
+<Text
+  style={{
+    color: COLORS.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 10,
+  }}
+>
+  By continuing, you agree that any refunds will be processed according to
+  the Cancellation Policy and Refund Policy above.
+</Text>
+
+      <View
+        style={{
+          flexDirection: "row",
+          marginTop: 16,
+          gap: 18,
+        }}
+      >
+        <Pressable
+          onPress={() =>
+Linking.openURL(
+  "https://cl216.github.io/elevator-legal/refund-policy.html"
+)
+          }
+        >
+          <Text
+            style={{
+              color: COLORS.accent,
+              fontWeight: "700",
+            }}
+          >
+            Refund Policy
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() =>
+            Linking.openURL(
+  "https://cl216.github.io/elevator-legal/terms.html"
+           )
+          }
+        >
+          <Text
+            style={{
+              color: COLORS.accent,
+              fontWeight: "700",
+            }}
+          >
+            Terms of Service
+          </Text>
+        </Pressable>
+      </View>
+
+      <Pressable
+        disabled={!acceptedPolicy}
+        onPress={continueBooking}
+        style={{
+          marginTop: 24,
+          backgroundColor: acceptedPolicy
+            ? COLORS.reserve
+            : COLORS.reserveDisabled,
+          paddingVertical: 15,
+          borderRadius: 14,
+          alignItems: "center",
+        }}
+      >
+        <Text
+          style={{
+            color: "#fff",
+            fontWeight: "800",
+            fontSize: 16,
+          }}
+        >
+          Continue to Payment
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => setShowBookingConfirm(false)}
+        style={{
+          marginTop: 12,
+          alignItems: "center",
+        }}
+      >
+        <Text
+          style={{
+            color: COLORS.textMuted,
+            fontWeight: "700",
+          }}
+        >
+          Cancel
+        </Text>
+      </Pressable>
+    </View>
+  </View>
+</Modal>
         <TeacherProfileBottomSheet
           ref={teacherSheetRef}
           teacherId={teacherProfileId}

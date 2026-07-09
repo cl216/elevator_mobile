@@ -54,19 +54,21 @@ export default function LoginScreen() {
         throw new Error("Missing auth tokens from /auth/login");
       }
 
-  await authStore.getState().setAuth(
-  res.data.access_token,
-  res.data.refresh_token,
-  !!res.data.user?.hasTeacherProfile,
-  res.data.user?.is_admin === true,
-  res.data.user?.image_url ?? null,
-);
+      await authStore.getState().setAuth(
+        res.data.access_token,
+        res.data.refresh_token,
+        !!res.data.user?.hasTeacherProfile,
+        res.data.user?.is_admin === true,
+        res.data.user?.image_url ?? null,
+      );
 
       await authStore.getState().refreshMe();
 
       safeReplace("/");
     } catch (e: any) {
-      const rawMessage = e?.response?.data?.message ?? e?.message ?? "Login failed.";
+      const rawMessage =
+        e?.response?.data?.message ?? e?.message ?? "Login failed.";
+
       const message = Array.isArray(rawMessage)
         ? rawMessage.join("\n")
         : String(rawMessage);
@@ -101,57 +103,57 @@ export default function LoginScreen() {
       style={styles.screen}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-        <AuthScreenShell>
-      <View style={styles.card}>
-        <Text style={styles.title}>Login</Text>
+      <AuthScreenShell>
+        <View style={styles.card}>
+          <Text style={styles.title}>Login</Text>
 
-<TextInput
-  value={email}
-  onChangeText={setEmail}
-  autoCapitalize="none"
-  autoCorrect={false}
-  keyboardType="email-address"
-  autoComplete="email"
-textContentType="emailAddress"
-  importantForAutofill="yes"
-  placeholder="Email"
-  placeholderTextColor={COLORS.textMuted}
-  style={styles.input}
-/>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            autoComplete="username"
+            textContentType="username"
+            importantForAutofill="yes"
+            placeholder="Email"
+            placeholderTextColor={COLORS.textMuted}
+            style={styles.input}
+          />
 
-<TextInput
-  value={password}
-  onChangeText={setPassword}
-  secureTextEntry
-  autoCapitalize="none"
-  autoCorrect={false}
-  autoComplete="password"
-  textContentType="password"
-  importantForAutofill="yes"
-  placeholder="Password"
-  placeholderTextColor={COLORS.textMuted}
-  style={styles.input}
-/>
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="current-password"
+            textContentType="password"
+            importantForAutofill="yes"
+            placeholder="Password"
+            placeholderTextColor={COLORS.textMuted}
+            style={styles.input}
+          />
 
-        <Pressable
-          onPress={onLogin}
-          disabled={loading}
-          style={[styles.button, loading && styles.buttonDisabled]}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? "Logging in..." : "Login"}
-          </Text>
-        </Pressable>
+          <Pressable
+            onPress={onLogin}
+            disabled={loading}
+            style={[styles.button, loading && styles.buttonDisabled]}
+          >
+            <Text style={styles.buttonText}>
+              {loading ? "Logging in..." : "Login"}
+            </Text>
+          </Pressable>
 
-        <Pressable onPress={() => safePush("/(auth)/forgot-password")}>
-          <Text style={styles.link}>Forgot password?</Text>
-        </Pressable>
+          <Pressable onPress={() => safePush("/(auth)/forgot-password")}>
+            <Text style={styles.link}>Forgot password?</Text>
+          </Pressable>
 
-        <Pressable onPress={() => safePush("/(auth)/register")}>
-          <Text style={styles.link}>Create an account</Text>
-        </Pressable>
-      </View>
-        </AuthScreenShell>
+          <Pressable onPress={() => safePush("/(auth)/register")}>
+            <Text style={styles.link}>Create an account</Text>
+          </Pressable>
+        </View>
+      </AuthScreenShell>
     </KeyboardAvoidingView>
   );
 }
