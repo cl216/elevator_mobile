@@ -83,9 +83,11 @@ type BookingRow = {
   booking_confirmed_at?: string | null;
   booking_cancelled_at?: string | null;
   booking_refunded_at?: string | null;
+  booking_has_review?: boolean | string | number | null;
 
   session_id: string;
   session_start_time: string;
+  session_end_time?: string | null;
   session_price: number;
   session_max_participants: number;
   session_rough_location?: string | null;
@@ -118,6 +120,15 @@ function getHoursUntil(dateString?: string) {
   }
 
   return (time - Date.now()) / (1000 * 60 * 60);
+}
+
+function bookingHasReview(booking: BookingRow) {
+  return (
+    booking.booking_has_review === true ||
+    booking.booking_has_review === "true" ||
+    booking.booking_has_review === 1 ||
+    booking.booking_has_review === "1"
+  );
 }
 
 function getApiErrorMessage(error: any, fallback: string): string {
@@ -290,9 +301,9 @@ function getLearnerCancelRefundPreview(booking: BookingRow) {
     return "This will cancel your confirmed booking. Refund eligibility will depend on the booking policy.";
   }
 
-  if (hoursUntilSession >= 12) {
-    return "This will cancel your confirmed booking. You’ll receive a full refund because this session starts in more than 12 hours.";
-  }
+if (hoursUntilSession >= 12) {
+  return "This will cancel your confirmed booking. You’ll receive a refund of the lesson price and Elevator fee. The payment-processing fee is non-refundable.";
+}
 
   if (hoursUntilSession > 0) {
     return "This will cancel your confirmed booking. This cancellation is not eligible for an automatic refund because the session starts in less than 12 hours.";
@@ -568,7 +579,7 @@ const handleCancelBooking = useCallback((booking: BookingRow) => {
             booking.booking_status === "PENDING"
               ? "Your pending booking has been cancelled."
               : hoursUntilSession !== null && hoursUntilSession >= 12
-                ? "Your booking has been cancelled. Your refund will be processed automatically."
+? "Your booking has been cancelled. Your lesson price and Elevator fee will be refunded automatically. The payment-processing fee is non-refundable."
                 : "Your booking has been cancelled.";
 
           Alert.alert("Booking cancelled", successMessage);
@@ -594,6 +605,26 @@ const handleCancelBooking = useCallback((booking: BookingRow) => {
       ["OPEN", "ACCEPTED"].includes(request.status),
     );
   }, [privateRequests]);
+
+  const attentionBookings = useMemo(() => {
+  return bookings
+    .filter(
+      (booking) =>
+        canLeaveReview(booking) ||
+        canReportTeacherNoShow(booking),
+    )
+    .sort((a, b) => {
+      const aTime = new Date(
+        a.session_end_time ?? a.session_start_time,
+      ).getTime();
+
+      const bTime = new Date(
+        b.session_end_time ?? b.session_start_time,
+      ).getTime();
+
+      return bTime - aTime;
+    });
+}, [bookings]);
 
   const upcomingBookings = useMemo(() => {
     return bookings
@@ -621,6 +652,8 @@ const handleCancelBooking = useCallback((booking: BookingRow) => {
     return bookings
       .filter(
         (b) =>
+                  !attentionBookingIds.has(b.booking_id) &&
+        (
           !b.session_start_time ||
           isPast(b.session_start_time) ||
           isPendingBookingExpired(b) ||
@@ -631,7 +664,8 @@ const handleCancelBooking = useCallback((booking: BookingRow) => {
           b.booking_status === "REFUNDED" ||
           b.booking_status === "REFUND_FAILED" ||
           b.booking_status === "EXPIRED",
-      )
+      ),
+    )
       .sort((a, b) => {
         const aTime = a.session_start_time
           ? new Date(a.session_start_time).getTime()
@@ -652,14 +686,38 @@ const handleCancelBooking = useCallback((booking: BookingRow) => {
       !isPast(booking.session_start_time)
     );
   }
+function canLeaveReview(booking: BookingRow) {
+  const finishedAt =
+    booking.session_end_time ?? booking.session_start_time;
 
-  function canLeaveReview(booking: BookingRow) {
-    return (
-      booking.booking_status === "CONFIRMED" &&
-      !!booking.session_start_time &&
-      isPast(booking.session_start_time)
-    );
+  return (
+    booking.booking_status === "CONFIRMED" &&
+    !!finishedAt &&
+    isPast(finishedAt) &&
+    !bookingHasReview(booking)
+  );
+}
+
+function canReportTeacherNoShow(booking: BookingRow) {
+  if (
+    booking.booking_status !== "CONFIRMED" ||
+    !booking.session_start_time ||
+    bookingHasReview(booking)
+  ) {
+    return false;
   }
+
+  const startTime = new Date(booking.session_start_time).getTime();
+
+  if (Number.isNaN(startTime)) {
+    return false;
+  }
+
+  const now = Date.now();
+  const deadline = startTime + 24 * 60 * 60 * 1000;
+
+  return now >= startTime && now <= deadline;
+}
 
   function hasActiveBookingForSession(sessionId?: string | null) {
     if (!sessionId) return false;
@@ -761,10 +819,9 @@ const handleCancelBooking = useCallback((booking: BookingRow) => {
 
     const showCancelButton = canLearnerCancel(booking);
     const showReviewButton = canLeaveReview(booking);
-    const showTeacherNoShowButton =
-  booking.booking_status === "CONFIRMED" &&
-  !!booking.session_start_time &&
-  isPast(booking.session_start_time);
+
+    const showTeacherNoShowButton = canReportTeacherNoShow(booking);
+
     const isCancelling = cancellingBookingId === booking.booking_id;
     const isPaying = payingBookingId === booking.booking_id;
     const isChecking = checkingBookingId === booking.booking_id;
@@ -852,8 +909,8 @@ const handleCancelBooking = useCallback((booking: BookingRow) => {
               <Text style={styles.infoBoxText}>{statusDescription}</Text>
             </View>
           ) : null}
-{showTeacherNoShowButton ? (
-  <View style={styles.postSessionCard}>
+{showReviewButton || showTeacherNoShowButton ? (
+    <View style={styles.postSessionCard}>
     <View style={styles.postSessionHeader}>
       <Ionicons
         name="time-outline"
@@ -871,31 +928,39 @@ const handleCancelBooking = useCallback((booking: BookingRow) => {
       you can report a no-show within 24 hours of the session start time.
     </Text>
 
-    <View style={styles.postSessionActions}>
-      <Pressable
-        onPress={(e) => {
-          e.stopPropagation();
-          safePush(`/(learner)/review/${booking.booking_id}`);
-        }}
-        style={styles.postSessionSuccessButton}
-      >
-        <Text style={styles.postSessionSuccessText}>
-          Session went fine
-        </Text>
-      </Pressable>
+<View style={styles.postSessionActions}>
 
-      <Pressable
-        onPress={(e) => {
-          e.stopPropagation();
-          openTeacherNoShowModal(booking);
-        }}
-        style={styles.postSessionDangerButton}
-      >
-        <Text style={styles.postSessionDangerText}>
-          Report no-show
-        </Text>
-      </Pressable>
-    </View>
+<View style={styles.postSessionActions}>
+  {showReviewButton ? (
+    <Pressable
+      onPress={(e) => {
+        e.stopPropagation();
+        safePush(`/(learner)/review/${booking.booking_id}`);
+      }}
+      style={styles.postSessionSuccessButton}
+    >
+      <Text style={styles.postSessionSuccessText}>
+        Session went fine
+      </Text>
+    </Pressable>
+  ) : null}
+
+  {showTeacherNoShowButton ? (
+    <Pressable
+      onPress={(e) => {
+        e.stopPropagation();
+        openTeacherNoShowModal(booking);
+      }}
+      style={styles.postSessionDangerButton}
+    >
+      <Text style={styles.postSessionDangerText}>
+        Report no-show
+      </Text>
+    </Pressable>
+  ) : null}
+</View>
+
+</View>
   </View>
 ) : null}
 
@@ -958,9 +1023,7 @@ const handleCancelBooking = useCallback((booking: BookingRow) => {
 
 {showPaymentButton ||
 showCheckStatusButton ||
-showCancelButton ||
-showReviewButton ||
-showTeacherNoShowButton ? (
+showCancelButton ? (
             <View style={styles.cardActions}>
               {showPaymentButton ? (
                 <Pressable
@@ -1014,30 +1077,6 @@ showTeacherNoShowButton ? (
                 </Pressable>
               ) : null}
 
-              {showReviewButton ? (
-                <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    safePush(`/(learner)/review/${booking.booking_id}`);
-                  }}
-                  style={styles.secondaryButton}
-                >
-                  <Text style={styles.secondaryButtonText}>Leave review</Text>
-                </Pressable>
-              ) : null}
-
-{showTeacherNoShowButton ? (
-  <Pressable
-    onPress={(e) => {
-      e.stopPropagation();
-openTeacherNoShowModal(booking);    }}
-    style={styles.secondaryButton}
-  >
-    <Text style={styles.secondaryButtonText}>
-      Report teacher no-show
-    </Text>
-  </Pressable>
-) : null}
 
               {showCancelButton ? (
                 <Pressable
@@ -1183,6 +1222,18 @@ openTeacherNoShowModal(booking);    }}
                 ) : null}
 
                 <View style={styles.sectionWrap}>
+                  {attentionBookings.length > 0 ? (
+  <View style={styles.sectionWrap}>
+    <Text style={styles.sectionTitle}>Needs your attention</Text>
+
+    <Text style={styles.attentionSectionSubtitle}>
+      Confirm how your recent session went or report an issue within the
+      available review period.
+    </Text>
+
+    {attentionBookings.map(renderBookingCard)}
+  </View>
+) : null}
                   <Text style={styles.sectionTitle}>Upcoming</Text>
 
                   {upcomingBookings.length === 0
@@ -1866,5 +1917,12 @@ postSessionDangerButton: {
 postSessionDangerText: {
   color: COLORS.dangerText,
   fontWeight: "900",
+},
+attentionSectionSubtitle: {
+  color: COLORS.textSoft,
+  fontSize: 14,
+  lineHeight: 20,
+  marginTop: -4,
+  marginBottom: 12,
 },
 });

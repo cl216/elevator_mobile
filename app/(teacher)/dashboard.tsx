@@ -1,9 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useFocusEffect } from "@react-navigation/native";import {
+import { useFocusEffect } from "@react-navigation/native";
+import {
   getTeacherAttentionSummary,
+  getTeacherPayoutSummary,
   type TeacherAttentionSummary,
+  type TeacherPayoutSummary,
 } from "@/src/api/teacherAttention";
 import {
   ActivityIndicator,
@@ -18,7 +21,7 @@ import {
 import { deleteAccount } from "@/src/api/auth";
 import { safePush, safeReplace } from "@/src/utils/safeRouter";
 import { getNearbyTeacherDemand } from "../../src/api/classRequests";
-import { api, markApiLogoutFinished } from "../../src/api/client";
+import { api } from "../../src/api/client";
 import { ExplainCard } from "../../src/components/ui/ExplainCard";
 import { authStore } from "../../src/store/auth.store";
 import {
@@ -117,14 +120,45 @@ function DashboardCard({
   );
 }
 
+function formatMoney(amountInCents?: number | null) {
+  const amount = Number(amountInCents ?? 0);
+
+  return new Intl.NumberFormat("en-IE", {
+    style: "currency",
+    currency: "EUR",
+  }).format(amount / 100);
+}
+
+function formatPayoutDate(dateString?: string | null) {
+  if (!dateString) return null;
+
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toLocaleString("en-IE", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function TeacherDashboard() {
   const [loading, setLoading] = useState(true);
 
+  
   const [attentionSummary, setAttentionSummary] =
     useState<TeacherAttentionSummary | null>(null);
 
   const [stripeStatus, setStripeStatus] =
     useState<StripeStatusResponse | null>(null);
+
+    const [payoutSummary, setPayoutSummary] =
+  useState<TeacherPayoutSummary | null>(null);
 
   const [onboardingLoading, setOnboardingLoading] = useState(false);
 
@@ -155,15 +189,21 @@ const [checkingExplainCard, setCheckingExplainCard] =
       setAttentionSummary(attentionRes);
 
       setDemand({
-        existing_categories: Array.isArray(
-          demandRes.existing_categories
-        )
+        existing_categories: Array.isArray(demandRes.existing_categories)
           ? demandRes.existing_categories
           : [],
         custom_ideas: Array.isArray(demandRes.custom_ideas)
           ? demandRes.custom_ideas
           : [],
       });
+
+      try {
+        const payoutRes = await getTeacherPayoutSummary();
+        setPayoutSummary(payoutRes);
+      } catch (payoutError) {
+        console.warn("Could not load payout summary", payoutError);
+        setPayoutSummary(null);
+      }
     } catch (e: any) {
       console.error(e);
 
@@ -173,9 +213,7 @@ const [checkingExplainCard, setCheckingExplainCard] =
         "Could not load teacher dashboard.";
 
       setDashboardError(
-        Array.isArray(message)
-          ? message.join("\n")
-          : String(message)
+        Array.isArray(message) ? message.join("\n") : String(message),
       );
     } finally {
       setLoading(false);
@@ -221,6 +259,11 @@ useEffect(() => {
     return "Action needed";
   }, [stripeReady]);
 
+  const nextEligibleLabel = useMemo(
+    () => formatPayoutDate(payoutSummary?.next_eligible_at),
+    [payoutSummary?.next_eligible_at],
+  );
+
   const topExistingCategories =
     demand.existing_categories.slice(0, 5);
 
@@ -233,7 +276,10 @@ useEffect(() => {
     function handleStripeOnboardingPress() {
   Alert.alert(
     "Before Stripe opens",
-  "• Business type: Select 'Individual / Sole Trader'\n\n• Business details: Select 'Consulting Services'\n\n• Product description: Enter something like 'Teaching lessons through the Elevator app'\n\n•",    
+"â€¢ Business type: Select 'Individual / Sole Trader'\n\n" +
+"â€¢ Business details: Choose the closest suitable teaching or educational service category.\n\n" +
+"â€¢ Product description: Enter something like 'Teaching lessons through the Elevator app'.\n\n" +
+"â€¢ Payout timing: Elevator transfers eligible earnings to Stripe 24 hours after the session ends, provided no issue is reported.",
     [
       { text: "Cancel", style: "cancel" },
       {
@@ -345,7 +391,7 @@ async function handleLogout() {
                 <ActivityIndicator color={COLORS.accent} />
 
                 <Text style={styles.loadingText}>
-                  Loading dashboard…
+                  Loading dashboardâ€¦
                 </Text>
               </View>
             </DashboardCard>
@@ -372,9 +418,11 @@ async function handleLogout() {
 <ExplainCard
   title="Welcome to teaching on Elevator"
   iconName="school-outline"
-  body="This is your teacher workspace.
+body="This is your teacher workspace.
 
 Create sessions, manage bookings, track payouts, and grow your local teaching profile.
+
+Teacher payouts become eligible 24 hours after a session ends, provided no issue is reported. Stripe and your bank may take additional time to complete the transfer.
 
 Good photos and beginner-friendly sessions usually perform best."
   ctaText="Continue"
@@ -497,6 +545,122 @@ Good photos and beginner-friendly sessions usually perform best."
                   </Text>
                 </View>
 
+                {stripeReady ? (
+                  <>
+                    <View style={styles.payoutSummaryGrid}>
+                      <View style={styles.payoutMetricCard}>
+                        <Text style={styles.payoutMetricLabel}>
+                          Pending earnings
+                        </Text>
+
+                        <Text style={styles.payoutMetricValue}>
+                          {payoutSummary
+                            ? formatMoney(payoutSummary.pending_amount)
+                            : "â€”"}
+                        </Text>
+
+                        <Text style={styles.payoutMetricHint}>
+                          {payoutSummary
+                            ? `${payoutSummary.pending_count} booking${
+                                payoutSummary.pending_count === 1 ? "" : "s"
+                              }`
+                            : "Payout data unavailable"}
+                        </Text>
+                      </View>
+
+                      <View style={styles.payoutMetricCard}>
+                        <Text style={styles.payoutMetricLabel}>
+                          Transferred to Stripe
+                        </Text>
+
+                        <Text style={styles.payoutMetricValue}>
+                          {payoutSummary
+                            ? formatMoney(payoutSummary.transferred_amount)
+                            : "â€”"}
+                        </Text>
+
+                        <Text style={styles.payoutMetricHint}>
+                          {payoutSummary
+                            ? `${payoutSummary.transferred_count} payout${
+                                payoutSummary.transferred_count === 1 ? "" : "s"
+                              }`
+                            : "Payout data unavailable"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {(payoutSummary?.failed_count ?? 0) > 0 ? (
+                      <View style={styles.payoutFailureBox}>
+                        <Ionicons
+                          name="alert-circle-outline"
+                          size={18}
+                          color={COLORS.warningText}
+                        />
+
+                        <View style={styles.payoutFailureTextWrap}>
+                          <Text style={styles.payoutFailureTitle}>
+                            Payout issue
+                          </Text>
+
+                          <Text style={styles.payoutFailureText}>
+                            {payoutSummary?.failed_count} payout
+                            {payoutSummary?.failed_count === 1 ? "" : "s"} could
+                            not be transferred. Amount affected:{" "}
+                            {formatMoney(payoutSummary?.failed_amount)}.
+                          </Text>
+                        </View>
+                      </View>
+                    ) : null}
+
+                    <View style={styles.payoutInfoBox}>
+                      <View style={styles.payoutInfoHeader}>
+                        <Ionicons
+                          name="time-outline"
+                          size={18}
+                          color={COLORS.warningText}
+                        />
+
+                        <Text style={styles.payoutInfoTitle}>
+                          When youâ€™ll be paid
+                        </Text>
+                      </View>
+
+                      {!payoutSummary ? (
+                        <Text style={styles.payoutInfoText}>
+                          Payout information is temporarily unavailable. Your
+                          sessions and Stripe connection are still working.
+                        </Text>
+                      ) : payoutSummary.pending_count > 0 ? (
+                        <>
+                          <Text style={styles.payoutInfoText}>
+                            Your next pending earnings become eligible for
+                            transfer:
+                          </Text>
+
+                          <Text style={styles.payoutEligibleDate}>
+                            {nextEligibleLabel ??
+                              "After the 24-hour review period"}
+                          </Text>
+                        </>
+                      ) : (
+                        <Text style={styles.payoutInfoText}>
+                          You currently have no earnings waiting for transfer.
+                        </Text>
+                      )}
+
+                      <Text style={styles.payoutInfoText}>
+                        Earnings become eligible 24 hours after each session
+                        ends, provided no issue or dispute is reported.
+                      </Text>
+
+                      <Text style={styles.payoutInfoTextLast}>
+                        Once transferred to Stripe, your bank may take
+                        additional business days to make the money available.
+                      </Text>
+                    </View>
+                  </>
+                ) : null}
+
                 {!stripeReady ? (
                   <AppButton
                     title={
@@ -504,7 +668,7 @@ Good photos and beginner-friendly sessions usually perform best."
                         ? "Opening Stripe..."
                         : "Continue Stripe onboarding"
                     }
-onPress={handleStripeOnboardingPress}
+                    onPress={handleStripeOnboardingPress}
                   />
                 ) : null}
               </DashboardCard>
@@ -802,6 +966,84 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
+  payoutSummaryGrid: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+  },
+
+  payoutMetricCard: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 16,
+    padding: 13,
+    backgroundColor: COLORS.surfaceSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  payoutMetricLabel: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    fontWeight: "800",
+    marginBottom: 6,
+  },
+
+  payoutMetricValue: {
+    color: COLORS.text,
+    fontSize: 20,
+    fontWeight: "900",
+  },
+
+  payoutMetricHint: {
+    color: COLORS.textSoft,
+    fontSize: 12,
+    marginTop: 4,
+  },
+
+  payoutEligibleDate: {
+    color: COLORS.warningText,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: "900",
+    marginBottom: 10,
+  },
+
+  payoutInfoTextLast: {
+    color: COLORS.textSoft,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
+  payoutFailureBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    borderRadius: 16,
+    padding: 13,
+    marginBottom: 12,
+    backgroundColor: COLORS.warningBg,
+    borderWidth: 1,
+    borderColor: COLORS.warningBorder,
+  },
+
+  payoutFailureTextWrap: {
+    flex: 1,
+  },
+
+  payoutFailureTitle: {
+    color: COLORS.warningText,
+    fontSize: 14,
+    fontWeight: "900",
+    marginBottom: 3,
+  },
+
+  payoutFailureText: {
+    color: COLORS.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
   listBlock: {
     marginBottom: 14,
   },
@@ -913,4 +1155,32 @@ const styles = StyleSheet.create({
   explainModalCard: {
     width: "100%",
   },
+  payoutInfoBox: {
+  marginTop: 2,
+  borderRadius: 16,
+  padding: 14,
+  backgroundColor: COLORS.warningBg,
+  borderWidth: 1,
+  borderColor: COLORS.warningBorder,
+},
+
+payoutInfoHeader: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 8,
+  marginBottom: 8,
+},
+
+payoutInfoTitle: {
+  color: COLORS.warningText,
+  fontSize: 15,
+  fontWeight: "900",
+},
+
+payoutInfoText: {
+  color: COLORS.textSoft,
+  fontSize: 14,
+  lineHeight: 20,
+  marginBottom: 8,
+},
 });

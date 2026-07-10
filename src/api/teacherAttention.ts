@@ -14,7 +14,26 @@ export type TeacherAttentionSummary = {
   items: TeacherAttentionItem[];
 };
 
+export type TeacherPayoutSummary = {
+  pending_amount: number;
+  pending_count: number;
+  next_eligible_at: string | null;
+
+  transferred_amount: number;
+  transferred_count: number;
+
+  failed_amount: number;
+  failed_count: number;
+
+  currency: string;
+};
+
 export async function getTeacherAttentionSummary() {
   const res = await api.get("/teacher/attention-summary");
   return res.data as TeacherAttentionSummary;
+}
+
+export async function getTeacherPayoutSummary() {
+  const res = await api.get("/teacher/payout-summary");
+  return res.data as TeacherPayoutSummary;
 }
