@@ -663,7 +663,7 @@ const handleCancelBooking = useCallback((booking: BookingRow) => {
           b.booking_status === "REFUND_PENDING" ||
           b.booking_status === "REFUNDED" ||
           b.booking_status === "REFUND_FAILED" ||
-          b.booking_status === "EXPIRED",
+          b.booking_status === "EXPIRED"
       ),
     )
       .sort((a, b) => {
