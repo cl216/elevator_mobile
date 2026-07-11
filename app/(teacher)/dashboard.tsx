@@ -264,6 +264,14 @@ useEffect(() => {
     [payoutSummary?.next_eligible_at],
   );
 
+  const latestFundsAvailableLabel = useMemo(
+    () =>
+      formatPayoutDate(
+        payoutSummary?.latest_funds_available_at,
+      ),
+    [payoutSummary?.latest_funds_available_at],
+  );
+
   const topExistingCategories =
     demand.existing_categories.slice(0, 5);
 
@@ -276,10 +284,10 @@ useEffect(() => {
     function handleStripeOnboardingPress() {
   Alert.alert(
     "Before Stripe opens",
-"â€¢ Business type: Select 'Individual / Sole Trader'\n\n" +
-"â€¢ Business details: Choose the closest suitable teaching or educational service category.\n\n" +
-"â€¢ Product description: Enter something like 'Teaching lessons through the Elevator app'.\n\n" +
-"â€¢ Payout timing: Elevator transfers eligible earnings to Stripe 24 hours after the session ends, provided no issue is reported.",
+"• Business type: Select 'Individual / Sole Trader'\n\n" +
+"• Business details: Choose the closest suitable teaching or educational service category.\n\n" +
+"• Product description: Enter something like 'Teaching lessons through the Elevator app'.\n\n" +
+"• Payout timing: Elevator transfers eligible earnings to Stripe 24 hours after the session ends, provided no issue is reported.",
     [
       { text: "Cancel", style: "cancel" },
       {
@@ -391,7 +399,7 @@ async function handleLogout() {
                 <ActivityIndicator color={COLORS.accent} />
 
                 <Text style={styles.loadingText}>
-                  Loading dashboardâ€¦
+                  Loading dashboard…
                 </Text>
               </View>
             </DashboardCard>
@@ -547,46 +555,76 @@ Good photos and beginner-friendly sessions usually perform best."
 
                 {stripeReady ? (
                   <>
-                    <View style={styles.payoutSummaryGrid}>
-                      <View style={styles.payoutMetricCard}>
-                        <Text style={styles.payoutMetricLabel}>
-                          Pending earnings
-                        </Text>
+                    <View style={styles.currentPayoutCard}>
+                      {!payoutSummary ? (
+                        <>
+                          <Text style={styles.currentPayoutLabel}>
+                            Payout information
+                          </Text>
 
-                        <Text style={styles.payoutMetricValue}>
-                          {payoutSummary
-                            ? formatMoney(payoutSummary.pending_amount)
-                            : "â€”"}
-                        </Text>
+                          <Text style={styles.currentPayoutValue}>—</Text>
 
-                        <Text style={styles.payoutMetricHint}>
-                          {payoutSummary
-                            ? `${payoutSummary.pending_count} booking${
-                                payoutSummary.pending_count === 1 ? "" : "s"
-                              }`
-                            : "Payout data unavailable"}
-                        </Text>
-                      </View>
+                          <Text style={styles.currentPayoutStatusMuted}>
+                            Payout data is temporarily unavailable.
+                          </Text>
+                        </>
+                      ) : payoutSummary.pending_count > 0 ? (
+                        <>
+                          <Text style={styles.currentPayoutLabel}>
+                            Next payout
+                          </Text>
 
-                      <View style={styles.payoutMetricCard}>
-                        <Text style={styles.payoutMetricLabel}>
-                          Transferred to Stripe
-                        </Text>
+                          <Text style={styles.currentPayoutValue}>
+                            {formatMoney(payoutSummary.pending_amount)}
+                          </Text>
 
-                        <Text style={styles.payoutMetricValue}>
-                          {payoutSummary
-                            ? formatMoney(payoutSummary.transferred_amount)
-                            : "â€”"}
-                        </Text>
+                          <Text style={styles.currentPayoutStatusWarning}>
+                            Waiting for the review period
+                          </Text>
 
-                        <Text style={styles.payoutMetricHint}>
-                          {payoutSummary
-                            ? `${payoutSummary.transferred_count} payout${
-                                payoutSummary.transferred_count === 1 ? "" : "s"
-                              }`
-                            : "Payout data unavailable"}
-                        </Text>
-                      </View>
+                          <Text style={styles.currentPayoutDate}>
+                            {nextEligibleLabel
+                              ? `Eligible for transfer: ${nextEligibleLabel}`
+                              : "Eligible after the 24-hour review period"}
+                          </Text>
+                        </>
+                      ) : payoutSummary.latest_transferred_amount !== null ? (
+                        <>
+                          <Text style={styles.currentPayoutLabel}>
+                            Latest payout
+                          </Text>
+
+                          <Text style={styles.currentPayoutValue}>
+                            {formatMoney(
+                              payoutSummary.latest_transferred_amount,
+                            )}
+                          </Text>
+
+                          <Text style={styles.currentPayoutStatus}>
+                            Transferred to Stripe
+                          </Text>
+
+                          <Text style={styles.currentPayoutDate}>
+                            {latestFundsAvailableLabel
+                              ? `Expected available: ${latestFundsAvailableLabel}`
+                              : "Stripe is processing this transfer."}
+                          </Text>
+                        </>
+                      ) : (
+                        <>
+                          <Text style={styles.currentPayoutLabel}>
+                            Payouts
+                          </Text>
+
+                          <Text style={styles.currentPayoutValue}>
+                            €0.00
+                          </Text>
+
+                          <Text style={styles.currentPayoutStatusMuted}>
+                            No payout currently in progress.
+                          </Text>
+                        </>
+                      )}
                     </View>
 
                     {(payoutSummary?.failed_count ?? 0) > 0 ? (
@@ -625,37 +663,14 @@ Good photos and beginner-friendly sessions usually perform best."
                         </Text>
                       </View>
 
-                      {!payoutSummary ? (
-                        <Text style={styles.payoutInfoText}>
-                          Payout information is temporarily unavailable. Your
-                          sessions and Stripe connection are still working.
-                        </Text>
-                      ) : payoutSummary.pending_count > 0 ? (
-                        <>
-                          <Text style={styles.payoutInfoText}>
-                            Your next pending earnings become eligible for
-                            transfer:
-                          </Text>
-
-                          <Text style={styles.payoutEligibleDate}>
-                            {nextEligibleLabel ??
-                              "After the 24-hour review period"}
-                          </Text>
-                        </>
-                      ) : (
-                        <Text style={styles.payoutInfoText}>
-                          You currently have no earnings waiting for transfer.
-                        </Text>
-                      )}
-
                       <Text style={styles.payoutInfoText}>
-                        Earnings become eligible 24 hours after each session
-                        ends, provided no issue or dispute is reported.
+                        Elevator approves payouts 24 hours after a session ends,
+                        provided no issue or dispute is reported.
                       </Text>
 
-                      <Text style={styles.payoutInfoTextLast}>
-                        Once transferred to Stripe, your bank may take
-                        additional business days to make the money available.
+<Text style={styles.payoutInfoTextLast}>
+                        After transfer, Stripe and your bank may take additional
+                        time before the funds appear in your bank account.
                       </Text>
                     </View>
                   </>
@@ -966,39 +981,52 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  payoutSummaryGrid: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 12,
-  },
-
-  payoutMetricCard: {
-    flex: 1,
-    minWidth: 0,
+  currentPayoutCard: {
     borderRadius: 16,
-    padding: 13,
+    padding: 16,
+    marginBottom: 12,
     backgroundColor: COLORS.surfaceSoft,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
 
-  payoutMetricLabel: {
+  currentPayoutLabel: {
     color: COLORS.textMuted,
     fontSize: 12,
     fontWeight: "800",
     marginBottom: 6,
   },
 
-  payoutMetricValue: {
+  currentPayoutValue: {
     color: COLORS.text,
-    fontSize: 20,
+    fontSize: 26,
     fontWeight: "900",
+    marginBottom: 6,
   },
 
-  payoutMetricHint: {
+  currentPayoutStatus: {
+    color: COLORS.successText,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  currentPayoutStatusWarning: {
+    color: COLORS.warningText,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  currentPayoutStatusMuted: {
     color: COLORS.textSoft,
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  currentPayoutDate: {
+    color: COLORS.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 5,
   },
 
   payoutEligibleDate: {

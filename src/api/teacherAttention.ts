@@ -22,6 +22,9 @@ export type TeacherPayoutSummary = {
   transferred_amount: number;
   transferred_count: number;
 
+  latest_transferred_amount: number | null;
+  latest_funds_available_at: string | null;
+
   failed_amount: number;
   failed_count: number;
 
