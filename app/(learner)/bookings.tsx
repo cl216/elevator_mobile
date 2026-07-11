@@ -626,6 +626,11 @@ const handleCancelBooking = useCallback((booking: BookingRow) => {
     });
 }, [bookings]);
 
+const attentionBookingIds = useMemo(
+  () => new Set(attentionBookings.map((booking) => booking.booking_id)),
+  [attentionBookings],
+);
+
   const upcomingBookings = useMemo(() => {
     return bookings
       .filter(
@@ -676,7 +681,7 @@ const handleCancelBooking = useCallback((booking: BookingRow) => {
 
         return bTime - aTime;
       });
-  }, [bookings]);
+}, [bookings, attentionBookingIds]);
 
   function canLearnerCancel(booking: BookingRow) {
     return (
@@ -879,9 +884,12 @@ function canReportTeacherNoShow(booking: BookingRow) {
                   { color: statusStyles.textColor },
                 ]}
               >
-                {pendingExpired
-                  ? "Expired"
-                  : statusLabel(booking.booking_status)}
+              {pendingExpired
+  ? "Expired"
+  : booking.booking_status === "CONFIRMED" &&
+      isPast(booking.session_end_time ?? booking.session_start_time)
+    ? "Finished"
+    : statusLabel(booking.booking_status)}
               </Text>
             </View>
           </View>
@@ -928,7 +936,6 @@ function canReportTeacherNoShow(booking: BookingRow) {
       you can report a no-show within 24 hours of the session start time.
     </Text>
 
-<View style={styles.postSessionActions}>
 
 <View style={styles.postSessionActions}>
   {showReviewButton ? (
@@ -961,7 +968,6 @@ function canReportTeacherNoShow(booking: BookingRow) {
 </View>
 
 </View>
-  </View>
 ) : null}
 
           {hasMeetingDetails ? (

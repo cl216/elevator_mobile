@@ -621,7 +621,7 @@ Good photos and beginner-friendly sessions usually perform best."
                         />
 
                         <Text style={styles.payoutInfoTitle}>
-                          When youâ€™ll be paid
+                          When you will be paid
                         </Text>
                       </View>
 
