@@ -264,13 +264,13 @@ useEffect(() => {
     [payoutSummary?.next_eligible_at],
   );
 
-  const latestFundsAvailableLabel = useMemo(
-    () =>
-      formatPayoutDate(
-        payoutSummary?.latest_funds_available_at,
-      ),
-    [payoutSummary?.latest_funds_available_at],
-  );
+const latestTransferredLabel = useMemo(
+  () =>
+    formatPayoutDate(
+      payoutSummary?.latest_transferred_at,
+    ),
+  [payoutSummary?.latest_transferred_at],
+);
 
   const topExistingCategories =
     demand.existing_categories.slice(0, 5);
@@ -555,77 +555,95 @@ Good photos and beginner-friendly sessions usually perform best."
 
                 {stripeReady ? (
                   <>
-                    <View style={styles.currentPayoutCard}>
-                      {!payoutSummary ? (
-                        <>
-                          <Text style={styles.currentPayoutLabel}>
-                            Payout information
-                          </Text>
+<View style={styles.currentPayoutCard}>
+  {!payoutSummary ? (
+    <>
+      <Text style={styles.currentPayoutLabel}>
+        Earnings information
+      </Text>
 
-                          <Text style={styles.currentPayoutValue}>—</Text>
+      <Text style={styles.currentPayoutValue}>—</Text>
 
-                          <Text style={styles.currentPayoutStatusMuted}>
-                            Payout data is temporarily unavailable.
-                          </Text>
-                        </>
-                      ) : payoutSummary.pending_count > 0 ? (
-                        <>
-                          <Text style={styles.currentPayoutLabel}>
-                            Next payout
-                          </Text>
+      <Text style={styles.currentPayoutStatusMuted}>
+        Earnings data is temporarily unavailable.
+      </Text>
+    </>
+  ) : payoutSummary.pending_count > 0 ? (
+    <>
+      <Text style={styles.currentPayoutLabel}>
+        Awaiting transfer
+      </Text>
 
-                          <Text style={styles.currentPayoutValue}>
-                            {formatMoney(payoutSummary.pending_amount)}
-                          </Text>
+      <Text style={styles.currentPayoutValue}>
+        {formatMoney(payoutSummary.pending_amount)}
+      </Text>
 
-                          <Text style={styles.currentPayoutStatusWarning}>
-                            Waiting for the review period
-                          </Text>
+      <Text style={styles.currentPayoutStatusWarning}>
+        In the 24-hour review period
+      </Text>
 
-                          <Text style={styles.currentPayoutDate}>
-                            {nextEligibleLabel
-                              ? `Eligible for transfer: ${nextEligibleLabel}`
-                              : "Eligible after the 24-hour review period"}
-                          </Text>
-                        </>
-                      ) : payoutSummary.latest_transferred_amount !== null ? (
-                        <>
-                          <Text style={styles.currentPayoutLabel}>
-                            Latest payout
-                          </Text>
+      <Text style={styles.currentPayoutDate}>
+        {nextEligibleLabel
+          ? `Eligible for transfer: ${nextEligibleLabel}`
+          : "Eligible after the 24-hour review period"}
+      </Text>
 
-                          <Text style={styles.currentPayoutValue}>
-                            {formatMoney(
-                              payoutSummary.latest_transferred_amount,
-                            )}
-                          </Text>
+      <View style={styles.payoutDivider} />
 
-                          <Text style={styles.currentPayoutStatus}>
-                            Transferred to Stripe
-                          </Text>
+      <Text style={styles.payoutHistoryLabel}>
+        Total transferred
+      </Text>
 
-                          <Text style={styles.currentPayoutDate}>
-                            {latestFundsAvailableLabel
-                              ? `Expected available: ${latestFundsAvailableLabel}`
-                              : "Stripe is processing this transfer."}
-                          </Text>
-                        </>
-                      ) : (
-                        <>
-                          <Text style={styles.currentPayoutLabel}>
-                            Payouts
-                          </Text>
+      <Text style={styles.payoutHistoryValue}>
+        {formatMoney(payoutSummary.transferred_amount)}
+      </Text>
 
-                          <Text style={styles.currentPayoutValue}>
-                            €0.00
-                          </Text>
+      <Text style={styles.payoutHistoryMeta}>
+        {payoutSummary.transferred_count} completed transfer
+        {payoutSummary.transferred_count === 1 ? "" : "s"}
+      </Text>
+    </>
+  ) : (
+    <>
+      <Text style={styles.currentPayoutLabel}>
+        Total transferred
+      </Text>
 
-                          <Text style={styles.currentPayoutStatusMuted}>
-                            No payout currently in progress.
-                          </Text>
-                        </>
-                      )}
-                    </View>
+      <Text style={styles.currentPayoutValue}>
+        {formatMoney(payoutSummary.transferred_amount)}
+      </Text>
+
+      {payoutSummary.transferred_count > 0 ? (
+        <>
+          <Text style={styles.currentPayoutStatus}>
+            Earnings transferred successfully
+          </Text>
+
+          <Text style={styles.currentPayoutDate}>
+            {latestTransferredLabel
+              ? `Most recent transfer: ${latestTransferredLabel}`
+              : `${payoutSummary.transferred_count} completed transfer${
+                  payoutSummary.transferred_count === 1 ? "" : "s"
+                }`}
+          </Text>
+
+          {payoutSummary.latest_transferred_amount !== null ? (
+            <Text style={styles.payoutHistoryMeta}>
+              Latest amount:{" "}
+              {formatMoney(
+                payoutSummary.latest_transferred_amount,
+              )}
+            </Text>
+          ) : null}
+        </>
+      ) : (
+        <Text style={styles.currentPayoutStatusMuted}>
+          No earnings transferred yet.
+        </Text>
+      )}
+    </>
+  )}
+</View>
 
                     {(payoutSummary?.failed_count ?? 0) > 0 ? (
                       <View style={styles.payoutFailureBox}>
@@ -1210,5 +1228,31 @@ payoutInfoText: {
   fontSize: 14,
   lineHeight: 20,
   marginBottom: 8,
+},
+
+payoutDivider: {
+  height: 1,
+  backgroundColor: COLORS.divider,
+  marginVertical: 16,
+},
+
+payoutHistoryLabel: {
+  color: COLORS.textSoft,
+  fontSize: 13,
+  fontWeight: "700",
+  marginBottom: 4,
+},
+
+payoutHistoryValue: {
+  color: COLORS.text,
+  fontSize: 20,
+  fontWeight: "900",
+},
+
+payoutHistoryMeta: {
+  color: COLORS.textMuted,
+  fontSize: 12,
+  lineHeight: 18,
+  marginTop: 6,
 },
 });

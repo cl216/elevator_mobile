@@ -780,23 +780,32 @@ Your exact address stays private until somebody books."
                     const selected = category === option.slug;
 
                     return (
-                      <Pressable
-                        key={option.id}
-                        onPress={() => setCategory(option.slug)}
-                        style={[
-                          styles.categoryChip,
-                          selected && styles.categoryChipSelected,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.categoryChipText,
-                            selected && styles.categoryChipTextSelected,
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                      </Pressable>
+                    <Pressable
+    key={option.id}
+    onPress={() => setCategory(option.slug)}
+    style={[
+        styles.categoryChip,
+        selected && styles.categoryChipSelected,
+    ]}
+>
+    {selected && (
+        <Ionicons
+            name="checkmark-circle"
+            size={16}
+            color="#FFFFFF"
+            style={{ marginRight: 6 }}
+        />
+    )}
+
+    <Text
+        style={[
+            styles.categoryChipText,
+            selected && styles.categoryChipTextSelected,
+        ]}
+    >
+        {option.label}
+    </Text>
+</Pressable>
                     );
                   })}
                 </View>
@@ -1474,28 +1483,32 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
-  categoryChip: {
-    backgroundColor: COLORS.surfaceSoft,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-  },
+categoryChip: {
+  flexDirection: "row",
+  alignItems: "center",
+  backgroundColor: COLORS.surfaceSoft,
+  borderWidth: 1,
+  borderColor: COLORS.border,
+  paddingHorizontal: 14,
+  paddingVertical: 10,
+  borderRadius: 999,
+},
 
-  categoryChipSelected: {
-    backgroundColor: COLORS.accentSoft,
-    borderColor: COLORS.accentBorder,
-  },
+categoryChipSelected: {
+  backgroundColor: COLORS.button,      // Bright purple
+  borderColor: "#FFFFFF",
+  borderWidth: 2,
+},
 
   categoryChipText: {
     color: COLORS.text,
     fontWeight: "700",
   },
 
-  categoryChipTextSelected: {
-    color: COLORS.text,
-  },
+categoryChipTextSelected: {
+  color: "#FFFFFF",
+  fontWeight: "800",
+},
 
   suggestCategoryButton: {
     minHeight: 48,
