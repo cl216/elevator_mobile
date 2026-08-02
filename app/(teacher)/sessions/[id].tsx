@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -18,6 +19,7 @@ import { getSessionBookings } from "../../../src/api/sessions";
 import AppLayout from "@/src/components/layout/AppLayout";
 import { AppScreen } from "@/src/components/ui/AppScreen";
 import { safePush } from "@/src/utils/safeRouter";
+import { mediaUrl } from "@/src/utils/mediaUrl";
 
 const COLORS = {
   bg: "#12051F",
@@ -87,6 +89,7 @@ type SessionBookingRow = {
   created_at: string;
   learner_id: string;
   learner_first_name: string;
+  learner_image_url?: string | null;
 };
 
 type SessionDetails = {
@@ -539,13 +542,23 @@ export default function TeacherSessionDetailScreen() {
                       <View key={booking.id} style={styles.cardOuter}>
                         <View style={styles.cardInner}>
                           <View style={styles.bookingHeaderRow}>
-                            <View style={styles.learnerAvatar}>
-                              <Text style={styles.learnerAvatarText}>
-                                {(booking.learner_first_name || "L")
-                                  .slice(0, 1)
-                                  .toUpperCase()}
-                              </Text>
-                            </View>
+                            {mediaUrl(booking.learner_image_url) ? (
+                              <Image
+                                source={{
+                                  uri: mediaUrl(booking.learner_image_url)!,
+                                }}
+                                style={styles.learnerAvatar}
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <View style={styles.learnerAvatar}>
+                                <Text style={styles.learnerAvatarText}>
+                                  {(booking.learner_first_name || "L")
+                                    .slice(0, 1)
+                                    .toUpperCase()}
+                                </Text>
+                              </View>
+                            )}
 
                             <View style={styles.bookingTextWrap}>
                               <Text style={styles.bookingName}>

@@ -68,6 +68,12 @@ const COLORS = {
   divider: "rgba(255,255,255,0.06)",
 };
 
+type SessionAttendee = {
+  id: string;
+  first_name: string;
+  image_url?: string | null;
+};
+
 type SessionDetail = {
   id: string;
   start_time: string;
@@ -75,8 +81,10 @@ type SessionDetail = {
   price: number;
   max_participants: number;
   bookings_count?: number;
+  confirmed_attendees_count?: number;
   spots_left?: number;
   attendee_first_names?: string[];
+  attendees?: SessionAttendee[];
   rough_location?: string | null;
   image_urls?: string[];
   class?: {
@@ -207,6 +215,7 @@ export const SessionBottomSheet = forwardRef<any, Props>(
 
     const [viewerVisible, setViewerVisible] = useState(false);
     const [viewerIndex, setViewerIndex] = useState(0);
+    const [attendeesVisible, setAttendeesVisible] = useState(false);
 
     const [teacherProfileId, setTeacherProfileId] = useState<string | null>(
       null,
@@ -228,6 +237,7 @@ export const SessionBottomSheet = forwardRef<any, Props>(
         setError(null);
         setViewerVisible(false);
         setViewerIndex(0);
+        setAttendeesVisible(false);
         setTeacherProfileId(null);
         return;
       }
@@ -275,6 +285,10 @@ export const SessionBottomSheet = forwardRef<any, Props>(
       if (images.length === 1) return [images[0], null, null];
       return [null, null, null];
     }, [images]);
+
+    const attendees = session?.attendees ?? [];
+    const confirmedAttendeesCount =
+      session?.confirmed_attendees_count ?? attendees.length;
 
     const teacherId = session?.teacher?.id ?? null;
 
@@ -625,16 +639,96 @@ snapPoints={["82%", "96%"]}
                       </View>
 
                       {attendanceLabel ? (
-                        <View style={styles.attendanceBar}>
-                          <Ionicons
-                            name="people-outline"
-                            size={16}
-                            color={COLORS.accent}
-                          />
-                          <Text style={styles.attendanceText}>
-                            {attendanceLabel}
-                          </Text>
-                        </View>
+                        <Pressable
+                          onPress={() => {
+                            if (attendees.length > 0) {
+                              setAttendeesVisible(true);
+                            }
+                          }}
+                          disabled={attendees.length === 0}
+                          style={({ pressed }) => [
+                            styles.attendanceBar,
+                            pressed && attendees.length > 0
+                              ? styles.attendanceBarPressed
+                              : null,
+                          ]}
+                        >
+                          {attendees.length > 0 ? (
+                            <View style={styles.attendeeAvatarStack}>
+                              {attendees.slice(0, 4).map((attendee, index) => {
+                                const avatar = mediaUrl(attendee.image_url ?? null);
+
+                                return avatar ? (
+                                  <Image
+                                    key={attendee.id}
+                                    source={{ uri: avatar }}
+                                    style={[
+                                      styles.attendeeAvatar,
+                                      index > 0 ? styles.attendeeAvatarOverlap : null,
+                                    ]}
+                                  />
+                                ) : (
+                                  <View
+                                    key={attendee.id}
+                                    style={[
+                                      styles.attendeeAvatar,
+                                      styles.attendeeAvatarFallback,
+                                      index > 0 ? styles.attendeeAvatarOverlap : null,
+                                    ]}
+                                  >
+                                    <Text style={styles.attendeeAvatarInitial}>
+                                      {(attendee.first_name || "?")
+                                        .slice(0, 1)
+                                        .toUpperCase()}
+                                    </Text>
+                                  </View>
+                                );
+                              })}
+
+                              {confirmedAttendeesCount > 4 ? (
+                                <View
+                                  style={[
+                                    styles.attendeeAvatar,
+                                    styles.attendeeAvatarMore,
+                                    styles.attendeeAvatarOverlap,
+                                  ]}
+                                >
+                                  <Text style={styles.attendeeAvatarMoreText}>
+                                    +{confirmedAttendeesCount - 4}
+                                  </Text>
+                                </View>
+                              ) : null}
+                            </View>
+                          ) : (
+                            <View style={styles.attendanceEmptyIcon}>
+                              <Ionicons
+                                name="people-outline"
+                                size={18}
+                                color={COLORS.accent}
+                              />
+                            </View>
+                          )}
+
+                          <View style={styles.attendanceTextWrap}>
+                            <Text style={styles.attendanceText}>
+                              {attendanceLabel}
+                            </Text>
+
+                            {attendees.length > 0 ? (
+                              <Text style={styles.attendanceHint}>
+                                Tap to view attendees
+                              </Text>
+                            ) : null}
+                          </View>
+
+                          {attendees.length > 0 ? (
+                            <Ionicons
+                              name="chevron-forward"
+                              size={18}
+                              color={COLORS.textMuted}
+                            />
+                          ) : null}
+                        </Pressable>
                       ) : null}
                     </View>
                   </>
@@ -695,6 +789,81 @@ snapPoints={["82%", "96%"]}
                 </View>
               ))}
             </ScrollView>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={attendeesVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setAttendeesVisible(false)}
+        >
+          <View style={styles.attendeesModalBackdrop}>
+            <View
+              style={[
+                styles.attendeesModalCard,
+                { paddingBottom: 18 + insets.bottom },
+              ]}
+            >
+              <View style={styles.attendeesModalHeader}>
+                <View>
+                  <Text style={styles.attendeesModalTitle}>Who's attending</Text>
+                  <Text style={styles.attendeesModalSubtitle}>
+                    {confirmedAttendeesCount} confirmed attendee
+                    {confirmedAttendeesCount === 1 ? "" : "s"}
+                  </Text>
+                </View>
+
+                <Pressable
+                  onPress={() => setAttendeesVisible(false)}
+                  style={styles.attendeesModalClose}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close attendee list"
+                >
+                  <Ionicons name="close" size={24} color={COLORS.text} />
+                </Pressable>
+              </View>
+
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.attendeesListContent}
+              >
+                {attendees.map((attendee) => {
+                  const avatar = mediaUrl(attendee.image_url ?? null);
+
+                  return (
+                    <View key={attendee.id} style={styles.attendeeListRow}>
+                      {avatar ? (
+                        <Image
+                          source={{ uri: avatar }}
+                          style={styles.attendeeListAvatar}
+                        />
+                      ) : (
+                        <View
+                          style={[
+                            styles.attendeeListAvatar,
+                            styles.attendeeAvatarFallback,
+                          ]}
+                        >
+                          <Text style={styles.attendeeListInitial}>
+                            {(attendee.first_name || "?")
+                              .slice(0, 1)
+                              .toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+
+                      <View style={styles.attendeeListTextWrap}>
+                        <Text style={styles.attendeeListName}>
+                          {attendee.first_name || "Attendee"}
+                        </Text>
+                        <Text style={styles.attendeeListStatus}>Confirmed</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
           </View>
         </Modal>
 
@@ -1342,21 +1511,185 @@ locationDetailHint: {
   attendanceBar: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
     backgroundColor: COLORS.accentSoft,
     borderWidth: 1,
     borderColor: COLORS.accentBorder,
-    borderRadius: 16,
+    borderRadius: 18,
     paddingHorizontal: 12,
-    paddingVertical: 11,
+    paddingVertical: 12,
     marginBottom: 6,
+  },
+
+  attendanceBarPressed: {
+    backgroundColor: COLORS.accentSoftStrong,
+    borderColor: COLORS.borderStrong,
+  },
+
+  attendanceEmptyIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.bg,
+    borderWidth: 1,
+    borderColor: COLORS.accentBorder,
+  },
+
+  attendeeAvatarStack: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: 2,
+  },
+
+  attendeeAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 2,
+    borderColor: COLORS.bg,
+    backgroundColor: COLORS.surfaceElevated,
+  },
+
+  attendeeAvatarOverlap: {
+    marginLeft: -12,
+  },
+
+  attendeeAvatarFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.surfaceElevated,
+  },
+
+  attendeeAvatarInitial: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  attendeeAvatarMore: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.accent,
+  },
+
+  attendeeAvatarMoreText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
+  attendanceTextWrap: {
+    flex: 1,
   },
 
   attendanceText: {
     color: COLORS.text,
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "800",
+  },
+
+  attendanceHint: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 3,
+  },
+
+  attendeesModalBackdrop: {
     flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.68)",
+  },
+
+  attendeesModalCard: {
+    maxHeight: "78%",
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: 1,
+    borderColor: COLORS.borderStrong,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+  },
+
+  attendeesModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
+  },
+
+  attendeesModalTitle: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: "900",
+  },
+
+  attendeesModalSubtitle: {
+    color: COLORS.textSoft,
+    fontSize: 13,
+    marginTop: 4,
+  },
+
+  attendeesModalClose: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.surfaceSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  attendeesListContent: {
+    paddingVertical: 10,
+  },
+
+  attendeeListRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 76,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
+  },
+
+  attendeeListAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: COLORS.borderStrong,
+    backgroundColor: COLORS.surfaceElevated,
+  },
+
+  attendeeListInitial: {
+    color: COLORS.text,
+    fontSize: 20,
+    fontWeight: "900",
+  },
+
+  attendeeListTextWrap: {
+    flex: 1,
+  },
+
+  attendeeListName: {
+    color: COLORS.text,
+    fontSize: 17,
+    fontWeight: "800",
+  },
+
+  attendeeListStatus: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    marginTop: 4,
   },
 
   reserveBar: {
