@@ -1434,15 +1434,9 @@ onPress={() => {
   ref={(r) => {
     cameraRef.current = r;
   }}
-  defaultSettings={{
-    centerCoordinate:
-      hasHydratedView && savedMapCenter
-        ? savedMapCenter
-        : userLocation ?? FALLBACK_LOCATION,
-    zoomLevel:
-      hasHydratedView && typeof savedMapZoom === "number"
-        ? savedMapZoom
-        : 13.5,
+defaultSettings={{
+    centerCoordinate: userLocation ?? FALLBACK_LOCATION,
+    zoomLevel: 13.5,
     pitch: 0,
     heading: 0,
   }}
