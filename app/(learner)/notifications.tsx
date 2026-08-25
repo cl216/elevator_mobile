@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { safePush, safeReplace } from "@/src/utils/safeRouter";
+import { safePush } from "@/src/utils/safeRouter";
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +12,7 @@ import {
   Text,
   View,
 } from "react-native";
-
+import { openNotificationDestination } from "@/src/utils/notificationNavigation";
 import AppLayout from "@/src/components/layout/AppLayout";
 import { AppScreen } from "@/src/components/ui/AppScreen";
 import {
@@ -221,91 +221,12 @@ async function handleClearAllNotifications() {
   async function handleOpenNotification(item: AppNotification) {
     await handleMarkOneRead(item);
 
-    const bookingId = item.payload?.booking_id;
-    const sessionId = item.payload?.session_id;
-    const privateSessionRequestId = item.payload?.private_session_request_id;
-    const type = item.type;
-
-    if (type === "private_session_request_created") {
-      if (privateSessionRequestId) {
-        safePush({
-          pathname: "/(teacher)/private-session-requests/[id]",
-          params: {
-            id: String(privateSessionRequestId),
-          },
-        });
-        return;
-      }
-
-      Alert.alert(
-        "Could not open request",
-        "This notification is missing the private request ID.",
-      );
-      return;
-    }
-
-    if (type === "review_reminder") {
-      if (bookingId) {
-        safePush(`/(learner)/review/${bookingId}`);
-        return;
-      }
-
-      safeReplace("/(learner)/bookings");
-      return;
-    }
-
-    if (
-      type === "booking_confirmed" ||
-      type === "booking_cancelled_by_teacher" ||
-      type === "refund_completed" ||
-      type === "session_reminder_24h" ||
-      type === "session_reminder_1h" ||
-      type === "learner_no_show_recorded"
-    ) {
-      safeReplace("/(learner)/bookings");
-      return;
-    }
-
-    if (type === "private_session_request_declined") {
-      return;
-    }
-
-    if (type === "private_session_request_accepted") {
-      if (sessionId) {
-        safePush(`/(modal)/booking/${sessionId}`);
-        return;
-      }
-
-      Alert.alert(
-        "Could not open session",
-        "This notification is missing the session ID.",
-      );
-      return;
-    }
-
-    if (
-      type === "new_booking_started" ||
-      type === "booking_confirmed_teacher" ||
-      type === "booking_cancelled_by_learner" ||
-      type === "teacher_session_reminder_24h" ||
-      type === "teacher_session_reminder_1h" ||
-        type === "teacher_attendance_check"
-    ) {
-      if (sessionId) {
-        safeReplace(`/(teacher)/sessions/${sessionId}`);
-        return;
-      }
-
-      safeReplace("/(teacher)/sessions");
-      return;
-    }
-
-    if (sessionId) {
-      safePush(`/(modal)/booking/${sessionId}`);
-    }
+    openNotificationDestination({
+      type: item.type,
+      ...(item.payload ?? {}),
+    });
   }
 
-  
   async function handleOpenMap(item: AppNotification) {
     await handleMarkOneRead(item);
 
